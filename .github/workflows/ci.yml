@@ -17,7 +17,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           otp-version: "27.0"
-          gleam-version: "1.6.3"
+          gleam-version: "1.14.0"
           rebar3-version: "3"
 
       - name: Download dependencies
@@ -36,7 +36,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           otp-version: "27.0"
-          gleam-version: "1.6.3"
+          gleam-version: "1.14.0"
           rebar3-version: "3"
 
       - name: Download dependencies
@@ -55,7 +55,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           otp-version: "27.0"
-          gleam-version: "1.6.3"
+          gleam-version: "1.14.0"
           rebar3-version: "3"
 
       - name: Check formatting
@@ -71,7 +71,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           otp-version: "27.0"
-          gleam-version: "1.6.3"
+          gleam-version: "1.14.0"
           rebar3-version: "3"
 
       - name: Download dependencies
