@@ -3,23 +3,55 @@
 //// This library provides a well-typed, idiomatic interface to Claude's API,
 //// including support for streaming responses and tool use.
 ////
-//// ## Quick Start
+//// ## Sans-IO Architecture
+////
+//// This library follows the sans-io pattern, separating HTTP concerns from
+//// API logic. You can use it in two ways:
+////
+//// ### 1. Sans-IO (Recommended for flexibility)
+////
+//// Build requests and parse responses with any HTTP client:
 ////
 //// ```gleam
+//// import anthropic/http
+//// import anthropic/types/request.{create_request}
 //// import anthropic/types/message.{user_message}
-//// import anthropic/types/request.{create_request, request_to_json_string}
 ////
-//// let request = create_request(
+//// // Build the request
+//// let api_request = create_request(
 ////   "claude-sonnet-4-20250514",
-////   [user_message("Hello, Claude!")],
+////   [user_message("Hello!")],
 ////   1024,
 //// )
-//// let json_string = request_to_json_string(request)
+//// let http_request = http.build_messages_request(api_key, base_url, api_request)
+////
+//// // Send with YOUR HTTP client (hackney, httpc, fetch, etc.)
+//// let http_response = my_client.send(http_request)
+////
+//// // Parse the response
+//// case http.parse_messages_response(http_response) {
+////   Ok(response) -> request.response_text(response)
+////   Error(err) -> error.error_to_string(err)
+//// }
+//// ```
+////
+//// ### 2. HTTP-Integrated (Convenient, uses gleam_httpc)
+////
+//// ```gleam
+//// import anthropic_gleam.{create_message, new_client, load_config}
+////
+//// let assert Ok(config) = load_config(config_options())
+//// let client = new_client(config)
+//// let request = create_request(model, messages, max_tokens)
+////
+//// case create_message(client, request) {
+////   Ok(response) -> response_text(response)
+////   Error(err) -> error_to_string(err)
+//// }
 //// ```
 ////
 //// ## Message Types
 ////
-//// The library provides comprehensive types for the Messages API:
 //// - `Role` - User or Assistant
 //// - `ContentBlock` - TextBlock, ImageBlock, ToolUseBlock, ToolResultBlock
 //// - `Message` - A complete message with role and content
@@ -31,17 +63,22 @@
 //// - `Usage` - Token usage information
 //// - `StopReason` - Why generation stopped
 ////
+//// ## HTTP Types (Sans-IO)
+////
+//// - `HttpRequest` - HTTP-library-agnostic request representation
+//// - `HttpResponse` - HTTP-library-agnostic response representation
+//// - `Method` - HTTP method enum
+////
 //// ## Error Types
 ////
 //// - `AnthropicError` - Sum type for all error categories
 //// - `ApiErrorType` - Specific API error types
 //// - `ApiErrorDetails` - Details from API error responses
-////
-//// All types support JSON encoding/decoding for API communication.
 
 import anthropic/api
 import anthropic/client
 import anthropic/config
+import anthropic/http
 import anthropic/streaming/accumulator
 import anthropic/streaming/decoder
 import anthropic/streaming/handler
@@ -143,6 +180,45 @@ pub const with_timeout_ms = config.with_timeout_ms
 pub const with_max_retries = config.with_max_retries
 
 pub const load_config = config.load_config
+
+// =============================================================================
+// HTTP Types (Sans-IO) - from anthropic/http
+// =============================================================================
+
+// Re-export HTTP types for sans-io usage
+pub type HttpRequest =
+  http.HttpRequest
+
+pub type HttpResponse =
+  http.HttpResponse
+
+pub type Method =
+  http.Method
+
+// Re-export HTTP constants
+pub const http_api_version = http.api_version
+
+pub const http_messages_endpoint = http.messages_endpoint
+
+pub const http_default_base_url = http.default_base_url
+
+// Re-export sans-io request builders
+pub const build_messages_request = http.build_messages_request
+
+pub const build_streaming_request = http.build_streaming_request
+
+// Re-export sans-io response parsers
+pub const parse_messages_response = http.parse_messages_response
+
+pub const check_status = http.check_status
+
+pub const parse_response_body = http.parse_response_body
+
+// Re-export validation
+pub const validate_request = http.validate_request
+
+// Re-export HTTP method conversion
+pub const method_to_string = http.method_to_string
 
 // =============================================================================
 // Request/Response Types (from anthropic/types/request)
@@ -503,11 +579,19 @@ pub type StreamHandlerError =
 pub type EventCallback =
   handler.EventCallback
 
-// Re-export handler functions
+// Re-export sans-io streaming functions
+pub const parse_streaming_response = handler.parse_streaming_response
+
+pub const parse_sse_body = handler.parse_sse_body
+
+pub const parse_sse_chunk = handler.parse_sse_chunk
+
+// Re-export HTTP-integrated handler functions (uses gleam_httpc)
 pub const stream_message = handler.stream_message
 
 pub const stream_message_with_callback = handler.stream_message_with_callback
 
+// Re-export event processing utilities
 pub const get_text_deltas = handler.get_text_deltas
 
 pub const get_full_text = handler.get_full_text
