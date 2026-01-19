@@ -36,20 +36,18 @@ import anthropic/types/message.{
   Assistant, Base64, ImageBlock, ImageSource, Message, TextBlock,
   ToolResultBlock, ToolUseBlock, User, assistant_message, content_block_to_json,
   content_block_to_json_string, content_block_type, get_tool_uses, has_tool_use,
-  image, image_source_to_json, message, message_text, message_to_json,
-  message_to_json_string, messages_to_json, role_from_string, role_to_json,
-  role_to_string, text, tool_error, tool_result, tool_use, user_message,
+  image_source_to_json, message_text, message_to_json, message_to_json_string,
+  messages_to_json, role_from_string, role_to_json, role_to_string, user_message,
 }
 import anthropic/types/request.{
-  EndTurn, MaxTokens, Metadata, StopSequence, ToolUse, create_request,
+  EndTurn, MaxTokens, Metadata, StopSequence, ToolUse, Usage, create_request,
   create_response, create_response_with_stop_sequence, metadata_to_json,
   request_to_json, request_to_json_string, response_get_tool_uses,
   response_has_tool_use, response_text, response_to_json,
   response_to_json_string, stop_reason_from_string, stop_reason_to_json,
-  stop_reason_to_string, usage, usage_to_json, with_metadata,
-  with_stop_sequences, with_stream, with_system, with_temperature,
-  with_tool_choice, with_tools, with_tools_and_choice, with_top_k, with_top_p,
-  with_user_id,
+  stop_reason_to_string, usage_to_json, with_metadata, with_stop_sequences,
+  with_stream, with_system, with_temperature, with_tool_choice, with_tools,
+  with_tools_and_choice, with_top_k, with_top_p, with_user_id,
 }
 import anthropic/types/tool.{
   type ToolCall, Any, Auto, NoTool, ToolFailure, ToolName, ToolSuccess,
@@ -331,13 +329,18 @@ pub fn assistant_message_test() {
   assert msg.role == Assistant
 }
 
-pub fn text_constructor_test() {
-  let block = text("test content")
+pub fn text_block_test() {
+  let block = TextBlock(text: "test content")
   assert block == TextBlock(text: "test content")
 }
 
-pub fn image_constructor_test() {
-  let block = image("image/png", "base64data")
+pub fn image_block_test() {
+  let block =
+    ImageBlock(source: ImageSource(
+      source_type: Base64,
+      media_type: "image/png",
+      data: "base64data",
+    ))
   let assert ImageBlock(source: ImageSource(
     source_type: Base64,
     media_type: mt,
@@ -347,19 +350,21 @@ pub fn image_constructor_test() {
   assert d == "base64data"
 }
 
-pub fn tool_use_constructor_test() {
-  let block = tool_use("id1", "my_tool", "{\"arg\":1}")
+pub fn tool_use_block_test() {
+  let block = ToolUseBlock(id: "id1", name: "my_tool", input: "{\"arg\":1}")
   assert block == ToolUseBlock(id: "id1", name: "my_tool", input: "{\"arg\":1}")
 }
 
-pub fn tool_result_constructor_test() {
-  let block = tool_result("id1", "success")
+pub fn tool_result_block_test() {
+  let block =
+    ToolResultBlock(tool_use_id: "id1", content: "success", is_error: None)
   assert block
     == ToolResultBlock(tool_use_id: "id1", content: "success", is_error: None)
 }
 
-pub fn tool_error_constructor_test() {
-  let block = tool_error("id1", "failed")
+pub fn tool_error_block_test() {
+  let block =
+    ToolResultBlock(tool_use_id: "id1", content: "failed", is_error: Some(True))
   assert block
     == ToolResultBlock(
       tool_use_id: "id1",
@@ -369,7 +374,11 @@ pub fn tool_error_constructor_test() {
 }
 
 pub fn message_constructor_test() {
-  let msg = message(User, [text("Hello"), text("World")])
+  let msg =
+    Message(role: User, content: [
+      TextBlock(text: "Hello"),
+      TextBlock(text: "World"),
+    ])
   assert msg.role == User
   assert list.length(msg.content) == 2
 }
@@ -386,7 +395,7 @@ pub fn message_to_json_string_test() {
 }
 
 pub fn content_block_to_json_string_test() {
-  let block = text("Hello")
+  let block = TextBlock(text: "Hello")
   let result = content_block_to_json_string(block)
   assert string.contains(result, "Hello")
 }
@@ -442,13 +451,13 @@ pub fn stop_reason_to_json_test() {
 // =============================================================================
 
 pub fn usage_constructor_test() {
-  let u = usage(100, 50)
+  let u = Usage(input_tokens: 100, output_tokens: 50)
   assert u.input_tokens == 100
   assert u.output_tokens == 50
 }
 
 pub fn usage_to_json_test() {
-  let u = usage(100, 50)
+  let u = Usage(input_tokens: 100, output_tokens: 50)
   let result = usage_to_json(u) |> json.to_string
   assert string.contains(result, "\"input_tokens\":100")
   assert string.contains(result, "\"output_tokens\":50")
@@ -603,7 +612,7 @@ pub fn create_response_test() {
       [TextBlock(text: "Hello!")],
       "claude-sonnet-4-20250514",
       Some(EndTurn),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
 
   assert resp.id == "msg_123"
@@ -623,7 +632,7 @@ pub fn create_response_with_stop_sequence_test() {
       "claude-sonnet-4-20250514",
       StopSequence,
       "END",
-      usage(15, 25),
+      Usage(input_tokens: 15, output_tokens: 25),
     )
 
   assert resp.stop_reason == Some(StopSequence)
@@ -637,7 +646,7 @@ pub fn response_text_test() {
       [TextBlock(text: "Hello "), TextBlock(text: "World!")],
       "claude-sonnet-4-20250514",
       Some(EndTurn),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
 
   assert response_text(resp) == "Hello World!"
@@ -653,7 +662,7 @@ pub fn response_text_with_tool_use_test() {
       ],
       "claude-sonnet-4-20250514",
       Some(ToolUse),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
 
   assert response_text(resp) == "Let me help"
@@ -669,7 +678,7 @@ pub fn response_has_tool_use_true_test() {
       ],
       "claude-sonnet-4-20250514",
       Some(ToolUse),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
 
   assert response_has_tool_use(resp) == True
@@ -682,7 +691,7 @@ pub fn response_has_tool_use_false_test() {
       [TextBlock(text: "Just text")],
       "claude-sonnet-4-20250514",
       Some(EndTurn),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
 
   assert response_has_tool_use(resp) == False
@@ -697,7 +706,7 @@ pub fn response_get_tool_uses_test() {
       [TextBlock(text: "Using tools"), tool1, tool2],
       "claude-sonnet-4-20250514",
       Some(ToolUse),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
 
   let tools = response_get_tool_uses(resp)
@@ -711,7 +720,7 @@ pub fn response_to_json_test() {
       [TextBlock(text: "Hello!")],
       "claude-sonnet-4-20250514",
       Some(EndTurn),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
   let result = response_to_json(resp) |> json.to_string
 
@@ -732,7 +741,7 @@ pub fn response_to_json_with_stop_sequence_test() {
       "claude-sonnet-4-20250514",
       StopSequence,
       "END",
-      usage(15, 25),
+      Usage(input_tokens: 15, output_tokens: 25),
     )
   let result = response_to_json(resp) |> json.to_string
 
@@ -747,7 +756,7 @@ pub fn response_to_json_string_test() {
       [TextBlock(text: "Test")],
       "claude-sonnet-4-20250514",
       None,
-      usage(5, 10),
+      Usage(input_tokens: 5, output_tokens: 10),
     )
   let result = response_to_json_string(resp)
 
@@ -2464,7 +2473,7 @@ fn create_tool_use_response() -> request.CreateMessageResponse {
     ],
     "claude-3-5-haiku-20241022",
     Some(ToolUse),
-    usage(10, 20),
+    Usage(input_tokens: 10, output_tokens: 20),
   )
 }
 
@@ -2480,7 +2489,7 @@ pub fn needs_tool_execution_false_test() {
       [TextBlock(text: "Hello!")],
       "claude-3-5-haiku-20241022",
       Some(EndTurn),
-      usage(10, 20),
+      Usage(input_tokens: 10, output_tokens: 20),
     )
   assert needs_tool_execution(response) == False
 }

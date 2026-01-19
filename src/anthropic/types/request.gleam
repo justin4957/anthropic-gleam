@@ -71,11 +71,6 @@ pub type Usage {
   )
 }
 
-/// Create a Usage from input and output token counts
-pub fn usage(input_tokens: Int, output_tokens: Int) -> Usage {
-  Usage(input_tokens: input_tokens, output_tokens: output_tokens)
-}
-
 /// Encode Usage to JSON
 pub fn usage_to_json(u: Usage) -> Json {
   json.object([
