@@ -240,51 +240,33 @@ pub fn get_tool_uses(message: Message) -> List(ContentBlock) {
 // =============================================================================
 
 /// Create a user message with text content
+///
+/// This is a convenience function for the common case of creating a simple
+/// text message from the user.
+///
+/// ## Example
+///
+/// ```gleam
+/// let msg = user_message("Hello, Claude!")
+/// // Equivalent to: Message(role: User, content: [TextBlock(text: "Hello, Claude!")])
+/// ```
 pub fn user_message(text_content: String) -> Message {
   Message(role: User, content: [TextBlock(text: text_content)])
 }
 
 /// Create an assistant message with text content
+///
+/// This is a convenience function for the common case of creating a simple
+/// text message from the assistant (useful for setting up conversation history).
+///
+/// ## Example
+///
+/// ```gleam
+/// let msg = assistant_message("I'm here to help!")
+/// // Equivalent to: Message(role: Assistant, content: [TextBlock(text: "I'm here to help!")])
+/// ```
 pub fn assistant_message(text_content: String) -> Message {
   Message(role: Assistant, content: [TextBlock(text: text_content)])
-}
-
-/// Create a message with the given role and content blocks
-pub fn message(role: Role, content: List(ContentBlock)) -> Message {
-  Message(role: role, content: content)
-}
-
-/// Create a text content block
-pub fn text(content: String) -> ContentBlock {
-  TextBlock(text: content)
-}
-
-/// Create an image content block from base64 data
-pub fn image(media_type: String, base64_data: String) -> ContentBlock {
-  ImageBlock(source: ImageSource(
-    source_type: Base64,
-    media_type: media_type,
-    data: base64_data,
-  ))
-}
-
-/// Create a tool use content block
-pub fn tool_use(id: String, name: String, input: String) -> ContentBlock {
-  ToolUseBlock(id: id, name: name, input: input)
-}
-
-/// Create a tool result content block
-pub fn tool_result(tool_use_id: String, content: String) -> ContentBlock {
-  ToolResultBlock(tool_use_id: tool_use_id, content: content, is_error: None)
-}
-
-/// Create a tool error result content block
-pub fn tool_error(tool_use_id: String, error_message: String) -> ContentBlock {
-  ToolResultBlock(
-    tool_use_id: tool_use_id,
-    content: error_message,
-    is_error: Some(True),
-  )
 }
 
 // =============================================================================
