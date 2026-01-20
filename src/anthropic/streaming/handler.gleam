@@ -1,19 +1,48 @@
-//// Streaming HTTP handler for Anthropic API
+//// Streaming handler for Anthropic API
 ////
-//// This module provides the HTTP handling for streaming responses from the
-//// Anthropic Messages API. It processes Server-Sent Events (SSE) and yields
-//// parsed streaming events.
+//// This module provides both sans-io functions for SSE parsing and
+//// HTTP-integrated streaming using gleam_httpc.
 ////
-//// Note: Currently uses synchronous HTTP with SSE parsing. True streaming
-//// with real-time chunk processing can be added via Erlang interop if needed.
+//// ## Sans-IO Usage (Recommended)
+////
+//// Build requests and parse responses without HTTP dependencies:
+////
+//// ```gleam
+//// import anthropic/http
+//// import anthropic/streaming/handler
+////
+//// // Build streaming request
+//// let http_request = http.build_streaming_request(api_key, base_url, request)
+////
+//// // Send with your HTTP client
+//// let http_response = my_http_client.send(http_request)
+////
+//// // Parse SSE response
+//// case handler.parse_streaming_response(http_response) {
+////   Ok(result) -> handler.get_full_text(result.events)
+////   Error(err) -> handle_error(err)
+//// }
+//// ```
+////
+//// ## HTTP-Integrated Usage (Uses gleam_httpc)
+////
+//// For convenience when gleam_httpc is available:
+////
+//// ```gleam
+//// case handler.stream_message(client, request) {
+////   Ok(result) -> handler.get_full_text(result.events)
+////   Error(err) -> handle_error(err)
+//// }
+//// ```
 
 import anthropic/client.{type Client}
+import anthropic/http
 import anthropic/streaming/decoder
 import anthropic/streaming/sse
 import anthropic/types/error.{type AnthropicError}
 import anthropic/types/request as api_request
 import anthropic/types/streaming.{type StreamEvent}
-import gleam/http
+import gleam/http as gleam_http
 import gleam/http/request
 import gleam/http/response.{type Response}
 import gleam/httpc
@@ -50,13 +79,105 @@ pub type EventCallback =
   fn(StreamEvent) -> Nil
 
 // =============================================================================
-// Streaming Functions
+// Sans-IO Functions (HTTP-library agnostic)
+// =============================================================================
+
+/// Parse an HTTP response body containing SSE events into StreamResult
+///
+/// This is the sans-io entry point for streaming. Use this with any HTTP client:
+///
+/// 1. Build a request with `http.build_streaming_request`
+/// 2. Send it with your HTTP client
+/// 3. Parse the response with this function
+///
+/// ## Example
+///
+/// ```gleam
+/// let http_response = HttpResponse(status: 200, headers: [], body: sse_body)
+/// case parse_streaming_response(http_response) {
+///   Ok(result) -> get_full_text(result.events)
+///   Error(err) -> handle_error(err)
+/// }
+/// ```
+pub fn parse_streaming_response(
+  response: http.HttpResponse,
+) -> Result(StreamResult, StreamError) {
+  case response.status {
+    200 -> parse_sse_body(response.body)
+    status -> Error(ApiError(status: status, body: response.body))
+  }
+}
+
+/// Parse SSE body text into streaming events
+///
+/// Use this for even more control - if you already have the SSE text
+/// and have handled status codes yourself.
+pub fn parse_sse_body(body: String) -> Result(StreamResult, StreamError) {
+  let state = sse.new_parser_state()
+  let parse_result = sse.parse_chunk(state, body)
+
+  // Decode all parsed SSE events into StreamEvents
+  let events =
+    parse_result.events
+    |> list.filter_map(fn(sse_event) {
+      case decoder.decode_event(sse_event) {
+        Ok(event) -> Ok(event)
+        Error(_) -> Error(Nil)
+      }
+    })
+
+  // Try to flush any remaining data
+  let final_events = case sse.flush(parse_result.state) {
+    Ok(sse_event) -> {
+      case decoder.decode_event(sse_event) {
+        Ok(event) -> list.append(events, [event])
+        Error(_) -> events
+      }
+    }
+    Error(_) -> events
+  }
+
+  Ok(StreamResult(events: final_events))
+}
+
+/// Parse a single SSE chunk and return events plus updated state
+///
+/// For incremental streaming, use this to process chunks as they arrive:
+///
+/// ```gleam
+/// let state = sse.new_parser_state()
+///
+/// // As each chunk arrives from your HTTP client:
+/// let #(events, new_state) = parse_sse_chunk(state, chunk)
+/// list.each(events, process_event)
+/// // Continue with new_state for next chunk
+/// ```
+pub fn parse_sse_chunk(
+  state: sse.SseParserState,
+  chunk: String,
+) -> #(List(StreamEvent), sse.SseParserState) {
+  let parse_result = sse.parse_chunk(state, chunk)
+
+  let events =
+    parse_result.events
+    |> list.filter_map(fn(sse_event) {
+      case decoder.decode_event(sse_event) {
+        Ok(event) -> Ok(event)
+        Error(_) -> Error(Nil)
+      }
+    })
+
+  #(events, parse_result.state)
+}
+
+// =============================================================================
+// HTTP-Integrated Functions (Uses gleam_httpc)
 // =============================================================================
 
 /// Stream a message request and return all events
 ///
-/// This function sends a streaming request to the Anthropic API,
-/// processes the SSE response, and returns all parsed events.
+/// This function uses gleam_httpc directly. For HTTP-library independence,
+/// use `http.build_streaming_request` + `parse_streaming_response` instead.
 ///
 /// ## Example
 ///
@@ -91,7 +212,7 @@ pub fn stream_message(
 
   // Check for error status
   case http_response.status {
-    200 -> parse_sse_response(http_response.body)
+    200 -> parse_sse_body(http_response.body)
     status -> Error(ApiError(status: status, body: http_response.body))
   }
 }
@@ -123,19 +244,19 @@ pub fn stream_message_with_callback(
   message_request: api_request.CreateMessageRequest,
   callback: EventCallback,
 ) -> Result(StreamResult, StreamError) {
-  use result <- result.try(stream_message(api_client, message_request))
+  use stream_result <- result.try(stream_message(api_client, message_request))
 
   // Call callback for each event
-  list.each(result.events, callback)
+  list.each(stream_result.events, callback)
 
-  Ok(result)
+  Ok(stream_result)
 }
 
 // =============================================================================
 // Internal Functions
 // =============================================================================
 
-/// Make a streaming HTTP request
+/// Make a streaming HTTP request using gleam_httpc
 fn make_streaming_request(
   api_client: Client,
   body: String,
@@ -154,7 +275,7 @@ fn make_streaming_request(
   // Set headers and body for streaming
   let req =
     req
-    |> request.set_method(http.Post)
+    |> request.set_method(gleam_http.Post)
     |> request.set_header("content-type", "application/json")
     |> request.set_header("x-api-key", api_client.config.api_key)
     |> request.set_header("anthropic-version", client.api_version)
@@ -166,35 +287,6 @@ fn make_streaming_request(
   |> httpc.timeout(api_client.config.timeout_ms)
   |> httpc.dispatch(req)
   |> result.map_error(fn(err) { http_error_to_anthropic_error(err) })
-}
-
-/// Parse an SSE response body into streaming events
-fn parse_sse_response(body: String) -> Result(StreamResult, StreamError) {
-  let state = sse.new_parser_state()
-  let parse_result = sse.parse_chunk(state, body)
-
-  // Decode all parsed SSE events into StreamEvents
-  let events =
-    parse_result.events
-    |> list.filter_map(fn(sse_event) {
-      case decoder.decode_event(sse_event) {
-        Ok(event) -> Ok(event)
-        Error(_) -> Error(Nil)
-      }
-    })
-
-  // Try to flush any remaining data
-  let final_events = case sse.flush(parse_result.state) {
-    Ok(sse_event) -> {
-      case decoder.decode_event(sse_event) {
-        Ok(event) -> list.append(events, [event])
-        Error(_) -> events
-      }
-    }
-    Error(_) -> events
-  }
-
-  Ok(StreamResult(events: final_events))
 }
 
 /// Convert httpc error to AnthropicError
@@ -222,7 +314,7 @@ fn connect_error_to_string(err: httpc.ConnectError) -> String {
 }
 
 // =============================================================================
-// Event Processing Utilities
+// Event Processing Utilities (Sans-IO - work with any event list)
 // =============================================================================
 
 /// Filter events to only text deltas
