@@ -2131,8 +2131,10 @@ pub fn accumulator_total_tokens_test() {
 // =============================================================================
 
 import anthropic/streaming/handler.{
-  get_full_text, get_message_id, get_model, get_text_deltas,
-  has_error as stream_has_error, is_complete,
+  build_stream_result, finalize_stream, get_accumulated_events, get_event_text,
+  get_full_text, get_message_id, get_model, get_stream_error, get_text_deltas,
+  has_error as stream_has_error, has_stream_error, is_complete,
+  is_stream_complete, new_streaming_state, process_chunk,
 }
 
 pub fn handler_get_text_deltas_test() {
@@ -2225,6 +2227,187 @@ pub fn handler_has_error_false_test() {
     MessageStopEvent,
   ]
   assert stream_has_error(events) == False
+}
+
+// =============================================================================
+// Incremental Streaming Tests (Sans-IO Real-Time Streaming)
+// =============================================================================
+
+pub fn handler_new_streaming_state_test() {
+  let state = new_streaming_state()
+  assert is_stream_complete(state) == False
+  assert has_stream_error(state) == False
+  assert get_accumulated_events(state) == []
+}
+
+pub fn handler_process_chunk_empty_test() {
+  let state = new_streaming_state()
+  let #(events, new_state) = process_chunk(state, "")
+  assert events == []
+  assert is_stream_complete(new_state) == False
+}
+
+pub fn handler_process_chunk_single_event_test() {
+  let state = new_streaming_state()
+  let sse_data =
+    "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_123\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-3-5-haiku\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"output_tokens\":0}}}\n\n"
+  let #(events, new_state) = process_chunk(state, sse_data)
+  assert list.length(events) == 1
+  assert is_stream_complete(new_state) == False
+}
+
+pub fn handler_process_chunk_text_delta_test() {
+  let state = new_streaming_state()
+  let sse_data =
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n"
+  let #(events, new_state) = process_chunk(state, sse_data)
+  assert list.length(events) == 1
+  case list.first(events) {
+    Ok(event) -> {
+      case get_event_text(event) {
+        Ok(text) -> {
+          assert text == "Hello"
+        }
+        Error(_) -> {
+          assert False
+        }
+      }
+    }
+    Error(_) -> {
+      assert False
+    }
+  }
+  assert is_stream_complete(new_state) == False
+}
+
+pub fn handler_process_chunk_multiple_chunks_test() {
+  // Simulate incremental streaming with multiple chunks
+  let state = new_streaming_state()
+
+  // First chunk - partial event
+  let chunk1 =
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n"
+  let #(events1, state1) = process_chunk(state, chunk1)
+  assert list.length(events1) == 1
+
+  // Second chunk - another event
+  let chunk2 =
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" World\"}}\n\n"
+  let #(events2, state2) = process_chunk(state1, chunk2)
+  assert list.length(events2) == 1
+
+  // Accumulated events should have both
+  let accumulated = get_accumulated_events(state2)
+  assert list.length(accumulated) == 2
+}
+
+pub fn handler_process_chunk_message_stop_completes_stream_test() {
+  let state = new_streaming_state()
+  let sse_data = "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+  let #(events, new_state) = process_chunk(state, sse_data)
+  assert list.length(events) == 1
+  assert is_stream_complete(new_state) == True
+}
+
+pub fn handler_get_event_text_success_test() {
+  let event =
+    ContentBlockDeltaEventVariant(content_block_delta: text_delta_event(
+      0,
+      "Hello",
+    ))
+  assert get_event_text(event) == Ok("Hello")
+}
+
+pub fn handler_get_event_text_non_text_event_test() {
+  let event = MessageStopEvent
+  assert get_event_text(event) == Error(Nil)
+}
+
+pub fn handler_get_event_text_message_start_test() {
+  let event =
+    MessageStartEvent(message: message_start("id", Assistant, "model", 0))
+  assert get_event_text(event) == Error(Nil)
+}
+
+pub fn handler_finalize_stream_empty_test() {
+  let state = new_streaming_state()
+  let remaining = finalize_stream(state)
+  assert remaining == []
+}
+
+pub fn handler_build_stream_result_test() {
+  let state = new_streaming_state()
+  let sse_data =
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Test\"}}\n\n"
+  let #(_events, state_with_events) = process_chunk(state, sse_data)
+  let result = build_stream_result(state_with_events)
+  assert list.length(result.events) == 1
+}
+
+pub fn handler_is_stream_complete_initially_false_test() {
+  let state = new_streaming_state()
+  assert is_stream_complete(state) == False
+}
+
+pub fn handler_has_stream_error_initially_false_test() {
+  let state = new_streaming_state()
+  assert has_stream_error(state) == False
+}
+
+pub fn handler_get_stream_error_initially_none_test() {
+  let state = new_streaming_state()
+  assert get_stream_error(state) == None
+}
+
+pub fn handler_process_chunk_accumulates_events_test() {
+  let state = new_streaming_state()
+
+  // Process first chunk
+  let chunk1 =
+    "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-3-5-haiku\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":5,\"output_tokens\":0}}}\n\n"
+  let #(_events1, state1) = process_chunk(state, chunk1)
+
+  // Process second chunk
+  let chunk2 =
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}\n\n"
+  let #(_events2, state2) = process_chunk(state1, chunk2)
+
+  // Process final chunk
+  let chunk3 = "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+  let #(_events3, final_state) = process_chunk(state2, chunk3)
+
+  // Should have accumulated all events
+  let all_events = get_accumulated_events(final_state)
+  assert list.length(all_events) == 3
+  assert is_stream_complete(final_state) == True
+}
+
+pub fn handler_realtime_text_extraction_pattern_test() {
+  // This test demonstrates the real-time streaming pattern
+  // where text is extracted from each chunk as it arrives
+  let state = new_streaming_state()
+
+  let chunk1 =
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n"
+  let #(events1, state1) = process_chunk(state, chunk1)
+
+  // Extract text from first chunk in real-time
+  let text1 =
+    events1
+    |> list.filter_map(get_event_text)
+    |> string.join("")
+  assert text1 == "Hello"
+
+  let chunk2 =
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" World\"}}\n\n"
+  let #(events2, _state2) = process_chunk(state1, chunk2)
+
+  // Extract text from second chunk in real-time
+  let text2 =
+    events2
+    |> list.filter_map(get_event_text)
+    |> string.join("")
+  assert text2 == " World"
 }
 
 // =============================================================================

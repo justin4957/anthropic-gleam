@@ -1,32 +1,50 @@
 //// Streaming handler for Anthropic API
 ////
-//// This module provides both sans-io functions for SSE parsing and
-//// HTTP-integrated streaming using gleam_httpc.
+//// This module provides sans-io functions for parsing Server-Sent Events (SSE)
+//// from the Anthropic streaming API. The design follows the sans-io pattern,
+//// allowing you to use any HTTP client that supports streaming.
 ////
-//// ## Sans-IO Usage (Recommended)
+//// ## True Real-Time Streaming (Sans-IO)
 ////
-//// Build requests and parse responses without HTTP dependencies:
+//// For true real-time streaming where you process events as they arrive,
+//// use the incremental parsing functions with your own streaming HTTP client:
 ////
 //// ```gleam
 //// import anthropic/http
-//// import anthropic/streaming/handler
+//// import anthropic/streaming/handler.{
+////   new_streaming_state, process_chunk, finalize_stream
+//// }
 ////
-//// // Build streaming request
+//// // 1. Build the streaming request
 //// let http_request = http.build_streaming_request(api_key, base_url, request)
 ////
-//// // Send with your HTTP client
-//// let http_response = my_http_client.send(http_request)
+//// // 2. Start streaming with your HTTP client that supports chunked responses
+//// // (e.g., using Erlang's httpc with stream option, or any other client)
 ////
-//// // Parse SSE response
-//// case handler.parse_streaming_response(http_response) {
-////   Ok(result) -> handler.get_full_text(result.events)
-////   Error(err) -> handle_error(err)
-//// }
+//// // 3. Initialize streaming state
+//// let state = new_streaming_state()
+////
+//// // 4. As each chunk arrives from your HTTP client, process it:
+//// let #(events, new_state) = process_chunk(state, chunk)
+////
+//// // 5. Handle events in real-time as they arrive
+//// list.each(events, fn(event) {
+////   case handler.get_event_text(event) {
+////     Ok(text) -> io.print(text)  // Print immediately!
+////     Error(_) -> Nil
+////   }
+//// })
+////
+//// // 6. Continue with new_state for next chunk...
+////
+//// // 7. When stream ends, finalize to get any remaining events
+//// let final_events = finalize_stream(state)
 //// ```
 ////
-//// ## HTTP-Integrated Usage (Uses gleam_httpc)
+//// ## Batch Mode (Convenience, uses gleam_httpc)
 ////
-//// For convenience when gleam_httpc is available:
+//// For simpler use cases where you don't need real-time processing,
+//// use the batch functions that collect all events before returning:
 ////
 //// ```gleam
 //// case handler.stream_message(client, request) {
@@ -34,6 +52,9 @@
 ////   Error(err) -> handle_error(err)
 //// }
 //// ```
+////
+//// **Note**: Batch mode waits for the complete response before returning.
+//// Use sans-io incremental parsing for true real-time streaming.
 
 import anthropic/client.{type Client}
 import anthropic/http
@@ -47,6 +68,7 @@ import gleam/http/request
 import gleam/http/response.{type Response}
 import gleam/httpc
 import gleam/list
+import gleam/option.{type Option, None}
 import gleam/result
 import gleam/string
 
@@ -54,7 +76,24 @@ import gleam/string
 // Types
 // =============================================================================
 
-/// Result of streaming a message
+/// State for incremental streaming (sans-io)
+///
+/// Use this to track parsing state across multiple chunks when implementing
+/// real-time streaming with your own HTTP client.
+pub type StreamingState {
+  StreamingState(
+    /// Internal SSE parser state
+    sse_state: sse.SseParserState,
+    /// Accumulated events (for building final result)
+    events: List(StreamEvent),
+    /// Whether the stream has completed
+    completed: Bool,
+    /// Error if one occurred
+    error: Option(StreamError),
+  )
+}
+
+/// Result of streaming a message (batch mode)
 pub type StreamResult {
   StreamResult(
     /// List of parsed streaming events
@@ -79,16 +118,153 @@ pub type EventCallback =
   fn(StreamEvent) -> Nil
 
 // =============================================================================
-// Sans-IO Functions (HTTP-library agnostic)
+// Sans-IO Incremental Streaming (True Real-Time)
+// =============================================================================
+
+/// Create a new streaming state for incremental parsing
+///
+/// Use this when implementing true real-time streaming with your own HTTP client.
+///
+/// ## Example
+///
+/// ```gleam
+/// let state = new_streaming_state()
+///
+/// // As chunks arrive from your streaming HTTP client:
+/// let #(events, new_state) = process_chunk(state, chunk)
+/// list.each(events, handle_event_immediately)
+/// ```
+pub fn new_streaming_state() -> StreamingState {
+  StreamingState(
+    sse_state: sse.new_parser_state(),
+    events: [],
+    completed: False,
+    error: None,
+  )
+}
+
+/// Process a chunk of SSE data and return parsed events
+///
+/// This is the core function for real-time streaming. Call it each time
+/// you receive a chunk from your streaming HTTP client.
+///
+/// Returns a tuple of:
+/// - List of events parsed from this chunk (process these immediately!)
+/// - Updated state to use for the next chunk
+///
+/// ## Example
+///
+/// ```gleam
+/// // In your streaming HTTP callback:
+/// fn on_chunk(state: StreamingState, chunk: String) -> StreamingState {
+///   let #(events, new_state) = process_chunk(state, chunk)
+///
+///   // Process events immediately as they arrive
+///   list.each(events, fn(event) {
+///     case get_event_text(event) {
+///       Ok(text) -> io.print(text)  // Real-time output!
+///       Error(_) -> Nil
+///     }
+///   })
+///
+///   new_state
+/// }
+/// ```
+pub fn process_chunk(
+  state: StreamingState,
+  chunk: String,
+) -> #(List(StreamEvent), StreamingState) {
+  let parse_result = sse.parse_chunk(state.sse_state, chunk)
+
+  let events =
+    parse_result.events
+    |> list.filter_map(fn(sse_event) {
+      case decoder.decode_event(sse_event) {
+        Ok(event) -> Ok(event)
+        Error(_) -> Error(Nil)
+      }
+    })
+
+  // Check if stream completed
+  let completed =
+    list.any(events, fn(event) {
+      case event {
+        streaming.MessageStopEvent -> True
+        _ -> False
+      }
+    })
+
+  // Check for errors
+  let error =
+    list.find_map(events, fn(event) {
+      case event {
+        streaming.ErrorEvent(err) ->
+          Ok(SseParseError(message: err.error_type <> ": " <> err.message))
+        _ -> Error(Nil)
+      }
+    })
+    |> option.from_result
+
+  let new_state =
+    StreamingState(
+      sse_state: parse_result.state,
+      events: list.append(state.events, events),
+      completed: completed,
+      error: error,
+    )
+
+  #(events, new_state)
+}
+
+/// Finalize the stream and get any remaining events
+///
+/// Call this when your HTTP client signals the stream has ended.
+/// Returns any events that were buffered but not yet emitted.
+pub fn finalize_stream(state: StreamingState) -> List(StreamEvent) {
+  case sse.flush(state.sse_state) {
+    Ok(sse_event) -> {
+      case decoder.decode_event(sse_event) {
+        Ok(event) -> [event]
+        Error(_) -> []
+      }
+    }
+    Error(_) -> []
+  }
+}
+
+/// Check if the stream has completed successfully
+pub fn is_stream_complete(state: StreamingState) -> Bool {
+  state.completed
+}
+
+/// Check if the stream encountered an error
+pub fn has_stream_error(state: StreamingState) -> Bool {
+  option.is_some(state.error)
+}
+
+/// Get the error from the stream if one occurred
+pub fn get_stream_error(state: StreamingState) -> Option(StreamError) {
+  state.error
+}
+
+/// Get all accumulated events from the streaming state
+pub fn get_accumulated_events(state: StreamingState) -> List(StreamEvent) {
+  state.events
+}
+
+/// Build a StreamResult from the final streaming state
+pub fn build_stream_result(state: StreamingState) -> StreamResult {
+  StreamResult(events: state.events)
+}
+
+// =============================================================================
+// Sans-IO Batch Parsing (Parse Complete Response)
 // =============================================================================
 
 /// Parse an HTTP response body containing SSE events into StreamResult
 ///
-/// This is the sans-io entry point for streaming. Use this with any HTTP client:
-///
-/// 1. Build a request with `http.build_streaming_request`
-/// 2. Send it with your HTTP client
-/// 3. Parse the response with this function
+/// This is for batch parsing of a complete response. For real-time streaming,
+/// use `new_streaming_state` + `process_chunk` instead.
 ///
 /// ## Example
 ///
@@ -108,50 +284,21 @@ pub fn parse_streaming_response(
   }
 }
 
-/// Parse SSE body text into streaming events
+/// Parse SSE body text into streaming events (batch mode)
 ///
-/// Use this for even more control - if you already have the SSE text
-/// and have handled status codes yourself.
+/// Use this for batch parsing when you have the complete SSE text.
+/// For real-time streaming, use `process_chunk` instead.
 pub fn parse_sse_body(body: String) -> Result(StreamResult, StreamError) {
-  let state = sse.new_parser_state()
-  let parse_result = sse.parse_chunk(state, body)
-
-  // Decode all parsed SSE events into StreamEvents
-  let events =
-    parse_result.events
-    |> list.filter_map(fn(sse_event) {
-      case decoder.decode_event(sse_event) {
-        Ok(event) -> Ok(event)
-        Error(_) -> Error(Nil)
-      }
-    })
-
-  // Try to flush any remaining data
-  let final_events = case sse.flush(parse_result.state) {
-    Ok(sse_event) -> {
-      case decoder.decode_event(sse_event) {
-        Ok(event) -> list.append(events, [event])
-        Error(_) -> events
-      }
-    }
-    Error(_) -> events
-  }
-
-  Ok(StreamResult(events: final_events))
+  let state = new_streaming_state()
+  let #(events, final_state) = process_chunk(state, body)
+  let remaining = finalize_stream(final_state)
+  Ok(StreamResult(events: list.append(events, remaining)))
 }
 
-/// Parse a single SSE chunk and return events plus updated state
+/// Parse a single SSE chunk and return events plus updated SSE state
 ///
-/// For incremental streaming, use this to process chunks as they arrive:
-///
-/// ```gleam
-/// let state = sse.new_parser_state()
-///
-/// // As each chunk arrives from your HTTP client:
-/// let #(events, new_state) = parse_sse_chunk(state, chunk)
-/// list.each(events, process_event)
-/// // Continue with new_state for next chunk
-/// ```
+/// Lower-level function that works directly with SSE parser state.
+/// Consider using `process_chunk` with `StreamingState` for a higher-level API.
 pub fn parse_sse_chunk(
   state: sse.SseParserState,
   chunk: String,
@@ -171,25 +318,22 @@ pub fn parse_sse_chunk(
 }
 
 // =============================================================================
-// HTTP-Integrated Functions (Uses gleam_httpc)
+// HTTP-Integrated Functions (Batch Mode - Uses gleam_httpc)
 // =============================================================================
 
-/// Stream a message request and return all events
+/// Stream a message request and return all events (batch mode)
 ///
-/// This function uses gleam_httpc directly. For HTTP-library independence,
-/// use `http.build_streaming_request` + `parse_streaming_response` instead.
+/// **Note**: This function collects ALL events before returning. It does NOT
+/// provide true real-time streaming. For real-time streaming, use the sans-io
+/// functions (`new_streaming_state`, `process_chunk`) with a streaming HTTP client.
 ///
 /// ## Example
 ///
 /// ```gleam
-/// let request = create_request(model, messages, max_tokens)
-///   |> with_stream(True)
-///
 /// case stream_message(client, request) {
 ///   Ok(result) -> {
-///     list.each(result.events, fn(event) {
-///       io.println(event_type_string(event))
-///     })
+///     // All events are already collected here
+///     get_full_text(result.events)
 ///   }
 ///   Error(err) -> handle_error(err)
 /// }
@@ -217,26 +361,18 @@ pub fn stream_message(
   }
 }
 
-/// Stream a message request with a callback for each event
+/// Stream a message request with a callback for each event (batch mode)
 ///
-/// This function is similar to `stream_message` but calls the provided
-/// callback function for each event as it is parsed.
+/// **Note**: Despite the callback, this function collects ALL events before
+/// calling the callbacks. It does NOT provide true real-time streaming.
+/// For real-time streaming, use the sans-io functions with a streaming HTTP client.
 ///
 /// ## Example
 ///
 /// ```gleam
+/// // Callbacks are called AFTER all events are collected
 /// stream_message_with_callback(client, request, fn(event) {
-///   case event {
-///     ContentBlockDeltaEventVariant(delta) -> {
-///       case delta.delta {
-///         TextContentDelta(text_delta) -> {
-///           io.print(text_delta.text)
-///         }
-///         _ -> Nil
-///       }
-///     }
-///     _ -> Nil
-///   }
+///   io.println(event_type_string(event))
 /// })
 /// ```
 pub fn stream_message_with_callback(
@@ -246,7 +382,7 @@ pub fn stream_message_with_callback(
 ) -> Result(StreamResult, StreamError) {
   use stream_result <- result.try(stream_message(api_client, message_request))
 
-  // Call callback for each event
+  // Call callback for each event (after all collected)
   list.each(stream_result.events, callback)
 
   Ok(stream_result)
@@ -317,20 +453,36 @@ fn connect_error_to_string(err: httpc.ConnectError) -> String {
 // Event Processing Utilities (Sans-IO - work with any event list)
 // =============================================================================
 
+/// Extract text from a single event if it contains text content
+///
+/// Useful for real-time streaming to print text as it arrives.
+///
+/// ## Example
+///
+/// ```gleam
+/// list.each(events, fn(event) {
+///   case get_event_text(event) {
+///     Ok(text) -> io.print(text)
+///     Error(_) -> Nil
+///   }
+/// })
+/// ```
+pub fn get_event_text(event: StreamEvent) -> Result(String, Nil) {
+  case event {
+    streaming.ContentBlockDeltaEventVariant(delta_event) -> {
+      case delta_event.delta {
+        streaming.TextContentDelta(text_delta) -> Ok(text_delta.text)
+        _ -> Error(Nil)
+      }
+    }
+    _ -> Error(Nil)
+  }
+}
+
 /// Filter events to only text deltas
 pub fn get_text_deltas(events: List(StreamEvent)) -> List(String) {
   events
-  |> list.filter_map(fn(event) {
-    case event {
-      streaming.ContentBlockDeltaEventVariant(delta_event) -> {
-        case delta_event.delta {
-          streaming.TextContentDelta(text_delta) -> Ok(text_delta.text)
-          _ -> Error(Nil)
-        }
-      }
-      _ -> Error(Nil)
-    }
-  })
+  |> list.filter_map(get_event_text)
 }
 
 /// Get the full text from a stream of events
@@ -361,7 +513,7 @@ pub fn get_model(events: List(StreamEvent)) -> Result(String, Nil) {
   })
 }
 
-/// Check if stream completed successfully
+/// Check if stream completed successfully (from event list)
 pub fn is_complete(events: List(StreamEvent)) -> Bool {
   list.any(events, fn(event) {
     case event {
@@ -371,7 +523,7 @@ pub fn is_complete(events: List(StreamEvent)) -> Bool {
   })
 }
 
-/// Check if stream ended with an error
+/// Check if stream ended with an error (from event list)
 pub fn has_error(events: List(StreamEvent)) -> Bool {
   list.any(events, fn(event) {
     case event {
