@@ -3547,3 +3547,694 @@ pub fn hooks_stream_event_type_test() {
   assert closed == StreamClosed
   assert err == StreamError(error: "connection lost")
 }
+
+// =============================================================================
+// Sans-IO HTTP Module Tests
+// =============================================================================
+
+import anthropic/http.{
+  Delete, Get, HttpRequest, HttpResponse, Patch, Post, Put,
+  build_messages_request, build_streaming_request, check_status,
+  method_to_string, parse_messages_response, parse_response_body,
+  validate_request as http_validate_request,
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Method Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_method_to_string_get_test() {
+  assert method_to_string(Get) == "GET"
+}
+
+pub fn http_method_to_string_post_test() {
+  assert method_to_string(Post) == "POST"
+}
+
+pub fn http_method_to_string_put_test() {
+  assert method_to_string(Put) == "PUT"
+}
+
+pub fn http_method_to_string_delete_test() {
+  assert method_to_string(Delete) == "DELETE"
+}
+
+pub fn http_method_to_string_patch_test() {
+  assert method_to_string(Patch) == "PATCH"
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Request Building Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_build_messages_request_basic_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+
+  let http_req =
+    build_messages_request(
+      "sk-ant-test-key",
+      "https://api.anthropic.com",
+      request,
+    )
+
+  assert http_req.method == Post
+  assert http_req.url == "https://api.anthropic.com/v1/messages"
+  assert string.contains(
+    http_req.body,
+    "\"model\":\"claude-sonnet-4-20250514\"",
+  )
+  assert string.contains(http_req.body, "\"max_tokens\":1024")
+}
+
+pub fn http_build_messages_request_headers_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+
+  let http_req =
+    build_messages_request(
+      "sk-ant-test-key",
+      "https://api.anthropic.com",
+      request,
+    )
+
+  // Check required headers are present
+  assert list.any(http_req.headers, fn(h) {
+    h.0 == "content-type" && h.1 == "application/json"
+  })
+  assert list.any(http_req.headers, fn(h) {
+    h.0 == "x-api-key" && h.1 == "sk-ant-test-key"
+  })
+  assert list.any(http_req.headers, fn(h) {
+    h.0 == "anthropic-version" && h.1 == "2023-06-01"
+  })
+}
+
+pub fn http_build_messages_request_custom_base_url_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+
+  let http_req =
+    build_messages_request("key", "https://custom.proxy.com", request)
+
+  assert http_req.url == "https://custom.proxy.com/v1/messages"
+}
+
+pub fn http_build_messages_request_with_system_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+    |> with_system("You are a helpful assistant")
+
+  let http_req =
+    build_messages_request("key", "https://api.anthropic.com", request)
+
+  assert string.contains(
+    http_req.body,
+    "\"system\":\"You are a helpful assistant\"",
+  )
+}
+
+pub fn http_build_messages_request_with_temperature_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+    |> with_temperature(0.7)
+
+  let http_req =
+    build_messages_request("key", "https://api.anthropic.com", request)
+
+  assert string.contains(http_req.body, "\"temperature\":0.7")
+}
+
+pub fn http_build_streaming_request_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+
+  let http_req =
+    build_streaming_request("sk-ant-key", "https://api.anthropic.com", request)
+
+  // Should have stream: true in body
+  assert string.contains(http_req.body, "\"stream\":true")
+  // Should have Accept header for SSE
+  assert list.any(http_req.headers, fn(h) {
+    h.0 == "accept" && h.1 == "text/event-stream"
+  })
+}
+
+pub fn http_build_streaming_request_preserves_other_options_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 2048)
+    |> with_system("Be concise")
+    |> with_temperature(0.5)
+
+  let http_req =
+    build_streaming_request("key", "https://api.anthropic.com", request)
+
+  assert string.contains(http_req.body, "\"max_tokens\":2048")
+  assert string.contains(http_req.body, "\"system\":\"Be concise\"")
+  assert string.contains(http_req.body, "\"temperature\":0.5")
+  assert string.contains(http_req.body, "\"stream\":true")
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Response Parsing Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_parse_messages_response_success_test() {
+  let response_body =
+    "{\"id\":\"msg_123\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Hello there!\"}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}"
+
+  let http_response =
+    HttpResponse(status: 200, headers: [], body: response_body)
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert response.id == "msg_123"
+      assert response.model == "claude-sonnet-4-20250514"
+      assert response.role == Assistant
+      assert response.stop_reason == Some(EndTurn)
+      assert response.usage.input_tokens == 10
+      assert response.usage.output_tokens == 5
+      assert response_text(response) == "Hello there!"
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
+
+pub fn http_parse_messages_response_with_tool_use_test() {
+  let response_body =
+    "{\"id\":\"msg_456\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_123\",\"name\":\"get_weather\",\"input\":{\"location\":\"London\"}}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":20,\"output_tokens\":15}}"
+
+  let http_response =
+    HttpResponse(status: 200, headers: [], body: response_body)
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert response.stop_reason == Some(ToolUse)
+      assert response_has_tool_use(response) == True
+      let tool_uses = response_get_tool_uses(response)
+      assert list.length(tool_uses) == 1
+      case list.first(tool_uses) {
+        Ok(ToolUseBlock(id, name, input)) -> {
+          assert id == "toolu_123"
+          assert name == "get_weather"
+          assert string.contains(input, "London")
+        }
+        _ -> panic as "Expected ToolUseBlock"
+      }
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
+
+pub fn http_parse_messages_response_max_tokens_stop_test() {
+  let response_body =
+    "{\"id\":\"msg_789\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"This is truncated...\"}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"max_tokens\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":5,\"output_tokens\":100}}"
+
+  let http_response =
+    HttpResponse(status: 200, headers: [], body: response_body)
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert response.stop_reason == Some(MaxTokens)
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
+
+pub fn http_parse_messages_response_stop_sequence_test() {
+  let response_body =
+    "{\"id\":\"msg_abc\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Hello\"}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"stop_sequence\",\"stop_sequence\":\"END\",\"usage\":{\"input_tokens\":5,\"output_tokens\":10}}"
+
+  let http_response =
+    HttpResponse(status: 200, headers: [], body: response_body)
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert response.stop_reason == Some(StopSequence)
+      assert response.stop_sequence == Some("END")
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
+
+pub fn http_parse_messages_response_multiple_content_blocks_test() {
+  let response_body =
+    "{\"id\":\"msg_multi\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"First block\"},{\"type\":\"text\",\"text\":\" and second block\"}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":10,\"output_tokens\":20}}"
+
+  let http_response =
+    HttpResponse(status: 200, headers: [], body: response_body)
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert list.length(response.content) == 2
+      assert response_text(response) == "First block and second block"
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Status Code Handling Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_check_status_200_success_test() {
+  let response = HttpResponse(status: 200, headers: [], body: "test body")
+  case check_status(response) {
+    Ok(body) -> {
+      assert body == "test body"
+    }
+    Error(_) -> panic as "Expected success"
+  }
+}
+
+pub fn http_check_status_400_invalid_request_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Invalid model\"}}"
+  let response = HttpResponse(status: 400, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_retryable(err) == False
+      assert error_category(err) == "api"
+      assert get_status_code(err) == Some(400)
+    }
+  }
+}
+
+pub fn http_check_status_401_authentication_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"Invalid API key\"}}"
+  let response = HttpResponse(status: 401, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_authentication_error(err) == True
+      assert is_retryable(err) == False
+      assert get_status_code(err) == Some(401)
+    }
+  }
+}
+
+pub fn http_check_status_403_permission_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"permission_error\",\"message\":\"Access denied\"}}"
+  let response = HttpResponse(status: 403, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_retryable(err) == False
+      assert get_status_code(err) == Some(403)
+    }
+  }
+}
+
+pub fn http_check_status_404_not_found_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"Resource not found\"}}"
+  let response = HttpResponse(status: 404, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_retryable(err) == False
+      assert get_status_code(err) == Some(404)
+    }
+  }
+}
+
+pub fn http_check_status_429_rate_limit_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Too many requests\"}}"
+  let response = HttpResponse(status: 429, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_rate_limit_error(err) == True
+      assert is_retryable(err) == True
+      assert get_status_code(err) == Some(429)
+    }
+  }
+}
+
+pub fn http_check_status_500_internal_error_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"Internal server error\"}}"
+  let response = HttpResponse(status: 500, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_retryable(err) == True
+      assert get_status_code(err) == Some(500)
+    }
+  }
+}
+
+pub fn http_check_status_529_overloaded_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"API is overloaded\"}}"
+  let response = HttpResponse(status: 529, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_overloaded_error(err) == True
+      assert is_retryable(err) == True
+      assert get_status_code(err) == Some(529)
+    }
+  }
+}
+
+pub fn http_check_status_other_4xx_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Some 4xx error\"}}"
+  let response = HttpResponse(status: 418, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_retryable(err) == False
+      assert get_status_code(err) == Some(418)
+    }
+  }
+}
+
+pub fn http_check_status_other_5xx_test() {
+  let error_body =
+    "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"Some 5xx error\"}}"
+  let response = HttpResponse(status: 503, headers: [], body: error_body)
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_retryable(err) == True
+      assert get_status_code(err) == Some(503)
+    }
+  }
+}
+
+pub fn http_check_status_malformed_error_body_test() {
+  // When error body can't be parsed, should still return proper error
+  let response = HttpResponse(status: 400, headers: [], body: "not json")
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert get_status_code(err) == Some(400)
+    }
+  }
+}
+
+pub fn http_check_status_unexpected_status_test() {
+  let response = HttpResponse(status: 102, headers: [], body: "processing")
+
+  case check_status(response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert error_category(err) == "http"
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Response Body Parsing Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_parse_response_body_valid_json_test() {
+  let body =
+    "{\"id\":\"msg_test\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Hi\"}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}"
+
+  case parse_response_body(body) {
+    Ok(response) -> {
+      assert response.id == "msg_test"
+      assert response_text(response) == "Hi"
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
+
+pub fn http_parse_response_body_invalid_json_test() {
+  let body = "not valid json"
+
+  case parse_response_body(body) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert error_category(err) == "json"
+    }
+  }
+}
+
+pub fn http_parse_response_body_missing_fields_test() {
+  let body = "{\"id\":\"msg_test\"}"
+
+  case parse_response_body(body) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert error_category(err) == "json"
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Request Validation Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_validate_request_valid_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+
+  case http_validate_request(request) {
+    Ok(_) -> {
+      assert True
+    }
+    Error(_) -> panic as "Expected valid request"
+  }
+}
+
+pub fn http_validate_request_empty_messages_test() {
+  let request = create_request("claude-sonnet-4-20250514", [], 1024)
+
+  case http_validate_request(request) {
+    Ok(_) -> panic as "Expected validation error"
+    Error(err) -> {
+      assert string.contains(error_to_string(err), "messages")
+    }
+  }
+}
+
+pub fn http_validate_request_empty_model_test() {
+  let request = create_request("", [user_message("Hello")], 1024)
+
+  case http_validate_request(request) {
+    Ok(_) -> panic as "Expected validation error"
+    Error(err) -> {
+      assert string.contains(error_to_string(err), "model")
+    }
+  }
+}
+
+pub fn http_validate_request_whitespace_model_test() {
+  let request = create_request("   ", [user_message("Hello")], 1024)
+
+  case http_validate_request(request) {
+    Ok(_) -> panic as "Expected validation error"
+    Error(err) -> {
+      assert string.contains(error_to_string(err), "model")
+    }
+  }
+}
+
+pub fn http_validate_request_zero_max_tokens_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], 0)
+
+  case http_validate_request(request) {
+    Ok(_) -> panic as "Expected validation error"
+    Error(err) -> {
+      assert string.contains(error_to_string(err), "max_tokens")
+    }
+  }
+}
+
+pub fn http_validate_request_negative_max_tokens_test() {
+  let request =
+    create_request("claude-sonnet-4-20250514", [user_message("Hello")], -100)
+
+  case http_validate_request(request) {
+    Ok(_) -> panic as "Expected validation error"
+    Error(err) -> {
+      assert string.contains(error_to_string(err), "max_tokens")
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Type Construction Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_request_type_construction_test() {
+  let request =
+    HttpRequest(
+      method: Post,
+      url: "https://example.com/api",
+      headers: [#("Authorization", "Bearer token")],
+      body: "{\"test\": true}",
+    )
+
+  assert request.method == Post
+  assert request.url == "https://example.com/api"
+  assert list.length(request.headers) == 1
+  assert request.body == "{\"test\": true}"
+}
+
+pub fn http_response_type_construction_test() {
+  let response =
+    HttpResponse(
+      status: 201,
+      headers: [#("Content-Type", "application/json")],
+      body: "{\"created\": true}",
+    )
+
+  assert response.status == 201
+  assert list.length(response.headers) == 1
+  assert response.body == "{\"created\": true}"
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Constants Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_api_version_constant_test() {
+  assert http.api_version == "2023-06-01"
+}
+
+pub fn http_messages_endpoint_constant_test() {
+  assert http.messages_endpoint == "/v1/messages"
+}
+
+pub fn http_default_base_url_constant_test() {
+  assert http.default_base_url == "https://api.anthropic.com"
+}
+
+// -----------------------------------------------------------------------------
+// HTTP Integration Pattern Tests
+// -----------------------------------------------------------------------------
+
+pub fn http_round_trip_pattern_test() {
+  // This tests the typical sans-io workflow:
+  // 1. Build request
+  // 2. (User would send with their HTTP client)
+  // 3. Parse response
+
+  // Step 1: Build the request
+  let api_request =
+    create_request(
+      "claude-sonnet-4-20250514",
+      [user_message("What is 2+2?")],
+      100,
+    )
+    |> with_temperature(0.0)
+
+  let http_request =
+    build_messages_request("test-api-key", http.default_base_url, api_request)
+
+  // Verify request is properly formed
+  assert http_request.method == Post
+  assert http_request.url == "https://api.anthropic.com/v1/messages"
+  assert string.contains(http_request.body, "What is 2+2?")
+
+  // Step 2: Simulate response from HTTP client
+  let http_response =
+    HttpResponse(
+      status: 200,
+      headers: [#("content-type", "application/json")],
+      body: "{\"id\":\"msg_roundtrip\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"2+2 equals 4.\"}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":15,\"output_tokens\":8}}",
+    )
+
+  // Step 3: Parse response
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert response.id == "msg_roundtrip"
+      assert response_text(response) == "2+2 equals 4."
+      assert response.usage.input_tokens == 15
+      assert response.usage.output_tokens == 8
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
+
+pub fn http_streaming_round_trip_pattern_test() {
+  // Test the streaming request building pattern
+  let api_request =
+    create_request(
+      "claude-sonnet-4-20250514",
+      [user_message("Count to 3")],
+      100,
+    )
+
+  let http_request =
+    build_streaming_request("test-api-key", http.default_base_url, api_request)
+
+  // Verify streaming-specific setup
+  assert string.contains(http_request.body, "\"stream\":true")
+  assert list.any(http_request.headers, fn(h) {
+    h.0 == "accept" && h.1 == "text/event-stream"
+  })
+}
+
+pub fn http_error_handling_pattern_test() {
+  // Test error response handling pattern
+  let http_response =
+    HttpResponse(
+      status: 401,
+      headers: [],
+      body: "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"Invalid API key provided\"}}",
+    )
+
+  case parse_messages_response(http_response) {
+    Ok(_) -> panic as "Expected error"
+    Error(err) -> {
+      assert is_authentication_error(err) == True
+      let err_str = error_to_string(err)
+      assert string.contains(err_str, "Invalid API key")
+    }
+  }
+}
+
+pub fn http_tool_use_response_pattern_test() {
+  // Test tool use response handling
+  let http_response =
+    HttpResponse(
+      status: 200,
+      headers: [],
+      body: "{\"id\":\"msg_tools\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Let me check the weather.\"},{\"type\":\"tool_use\",\"id\":\"toolu_weather\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\",\"units\":\"celsius\"}}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"usage\":{\"input_tokens\":50,\"output_tokens\":30}}",
+    )
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      // Should have both text and tool_use blocks
+      assert list.length(response.content) == 2
+      assert response_text(response) == "Let me check the weather."
+      assert response_has_tool_use(response) == True
+      assert response.stop_reason == Some(ToolUse)
+
+      // Verify tool use details
+      let tools = response_get_tool_uses(response)
+      assert list.length(tools) == 1
+      case list.first(tools) {
+        Ok(ToolUseBlock(id, name, input)) -> {
+          assert id == "toolu_weather"
+          assert name == "get_weather"
+          assert string.contains(input, "Paris")
+          assert string.contains(input, "celsius")
+        }
+        _ -> panic as "Expected ToolUseBlock"
+      }
+    }
+    Error(_) -> panic as "Expected successful parse"
+  }
+}
