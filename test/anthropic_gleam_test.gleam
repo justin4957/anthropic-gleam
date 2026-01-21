@@ -50,12 +50,11 @@ import anthropic/types/request.{
   with_tools_and_choice, with_top_k, with_top_p, with_user_id,
 }
 import anthropic/types/tool.{
-  type ToolCall, Any, Auto, NoTool, ToolFailure, ToolName, ToolSuccess,
-  array_property, auto_choice, empty_input_schema, enum_property, input_schema,
-  input_schema_to_json, no_tool_choice, object_property, property,
-  property_schema_to_json, property_with_description, tool, tool_call,
-  tool_choice_to_json, tool_failure, tool_name_choice, tool_success,
-  tool_to_json, tool_to_json_string, tool_with_description, tools_to_json,
+  type ToolCall, Any, Auto, NoTool, Tool, ToolCall, ToolFailure, ToolName,
+  ToolSuccess, array_property, empty_input_schema, enum_property, input_schema,
+  input_schema_to_json, object_property, property, property_schema_to_json,
+  property_with_description, tool_choice_to_json, tool_to_json,
+  tool_to_json_string, tools_to_json,
 }
 import anthropic/validation.{
   MaxTokensField, MessagesField, ModelField, StopSequencesField, SystemField,
@@ -2480,21 +2479,34 @@ pub fn input_schema_to_json_test() {
 }
 
 pub fn tool_simple_test() {
-  let t = tool("get_time", empty_input_schema())
+  let t =
+    Tool(
+      name: "get_time",
+      description: None,
+      input_schema: empty_input_schema(),
+    )
   assert t.name == "get_time"
   assert t.description == None
 }
 
 pub fn tool_with_description_test() {
   let t =
-    tool_with_description("get_time", "Get current time", empty_input_schema())
+    Tool(
+      name: "get_time",
+      description: Some("Get current time"),
+      input_schema: empty_input_schema(),
+    )
   assert t.name == "get_time"
   assert t.description == Some("Get current time")
 }
 
 pub fn tool_to_json_test() {
   let t =
-    tool_with_description("get_weather", "Get weather", empty_input_schema())
+    Tool(
+      name: "get_weather",
+      description: Some("Get weather"),
+      input_schema: empty_input_schema(),
+    )
   let json_str = tool_to_json(t) |> json.to_string
   assert string.contains(json_str, "\"name\":\"get_weather\"")
   assert string.contains(json_str, "\"description\":\"Get weather\"")
@@ -2502,14 +2514,17 @@ pub fn tool_to_json_test() {
 }
 
 pub fn tool_to_json_string_test() {
-  let t = tool("my_tool", empty_input_schema())
+  let t =
+    Tool(name: "my_tool", description: None, input_schema: empty_input_schema())
   let json_str = tool_to_json_string(t)
   assert string.contains(json_str, "\"name\":\"my_tool\"")
 }
 
 pub fn tools_to_json_test() {
-  let t1 = tool("tool1", empty_input_schema())
-  let t2 = tool("tool2", empty_input_schema())
+  let t1 =
+    Tool(name: "tool1", description: None, input_schema: empty_input_schema())
+  let t2 =
+    Tool(name: "tool2", description: None, input_schema: empty_input_schema())
   let json_str = tools_to_json([t1, t2]) |> json.to_string
   assert string.contains(json_str, "\"name\":\"tool1\"")
   assert string.contains(json_str, "\"name\":\"tool2\"")
@@ -2544,41 +2559,31 @@ pub fn tool_choice_specific_test() {
   assert string.contains(json_str, "\"name\":\"get_weather\"")
 }
 
-pub fn auto_choice_test() {
-  let choice = auto_choice()
-  assert choice == Auto
-}
-
-pub fn tool_name_choice_test() {
-  let choice = tool_name_choice("my_tool")
-  assert choice == ToolName(name: "my_tool")
-}
-
-pub fn no_tool_choice_test() {
-  let choice = no_tool_choice()
-  assert choice == NoTool
-}
-
 // =============================================================================
 // Tool Call and Result Tests
 // =============================================================================
 
 pub fn tool_call_test() {
-  let call = tool_call("id_123", "get_weather", "{\"location\": \"Paris\"}")
+  let call =
+    ToolCall(
+      id: "id_123",
+      name: "get_weather",
+      input: "{\"location\": \"Paris\"}",
+    )
   assert call.id == "id_123"
   assert call.name == "get_weather"
   assert call.input == "{\"location\": \"Paris\"}"
 }
 
 pub fn tool_success_test() {
-  let result = tool_success("id_123", "Sunny, 25C")
+  let result = ToolSuccess(tool_use_id: "id_123", content: "Sunny, 25C")
   let assert ToolSuccess(tool_use_id, content) = result
   assert tool_use_id == "id_123"
   assert content == "Sunny, 25C"
 }
 
 pub fn tool_failure_test() {
-  let result = tool_failure("id_123", "Location not found")
+  let result = ToolFailure(tool_use_id: "id_123", error: "Location not found")
   let assert ToolFailure(tool_use_id, error) = result
   assert tool_use_id == "id_123"
   assert error == "Location not found"
@@ -2589,7 +2594,12 @@ pub fn tool_failure_test() {
 // =============================================================================
 
 pub fn request_with_tools_test() {
-  let t = tool("get_weather", empty_input_schema())
+  let t =
+    Tool(
+      name: "get_weather",
+      description: None,
+      input_schema: empty_input_schema(),
+    )
   let req =
     create_request("claude-3-5-haiku-20241022", [user_message("Hello")], 100)
     |> with_tools([t])
@@ -2606,7 +2616,12 @@ pub fn request_with_tool_choice_test() {
 }
 
 pub fn request_with_tools_and_choice_test() {
-  let t = tool("get_weather", empty_input_schema())
+  let t =
+    Tool(
+      name: "get_weather",
+      description: None,
+      input_schema: empty_input_schema(),
+    )
   let req =
     create_request("claude-3-5-haiku-20241022", [user_message("Hello")], 100)
     |> with_tools_and_choice([t], Any)
@@ -2617,7 +2632,11 @@ pub fn request_with_tools_and_choice_test() {
 
 pub fn request_with_tools_to_json_test() {
   let t =
-    tool_with_description("get_weather", "Get weather", empty_input_schema())
+    Tool(
+      name: "get_weather",
+      description: Some("Get weather"),
+      input_schema: empty_input_schema(),
+    )
   let req =
     create_request("claude-3-5-haiku-20241022", [user_message("Hello")], 100)
     |> with_tools([t])
@@ -2744,7 +2763,7 @@ pub fn has_tool_call_false_test() {
 // =============================================================================
 
 pub fn tool_result_to_content_block_success_test() {
-  let result = tool_success("id_1", "Sunny, 25C")
+  let result = ToolSuccess(tool_use_id: "id_1", content: "Sunny, 25C")
   let block = tool_result_to_content_block(result)
   let assert ToolResultBlock(tool_use_id, content, is_error) = block
   assert tool_use_id == "id_1"
@@ -2753,7 +2772,7 @@ pub fn tool_result_to_content_block_success_test() {
 }
 
 pub fn tool_result_to_content_block_failure_test() {
-  let result = tool_failure("id_1", "Error occurred")
+  let result = ToolFailure(tool_use_id: "id_1", error: "Error occurred")
   let block = tool_result_to_content_block(result)
   let assert ToolResultBlock(tool_use_id, content, is_error) = block
   assert tool_use_id == "id_1"
@@ -2763,8 +2782,8 @@ pub fn tool_result_to_content_block_failure_test() {
 
 pub fn create_tool_result_message_test() {
   let results = [
-    tool_success("id_1", "Result 1"),
-    tool_failure("id_2", "Error 2"),
+    ToolSuccess(tool_use_id: "id_1", content: "Result 1"),
+    ToolFailure(tool_use_id: "id_2", error: "Error 2"),
   ]
   let msg = create_tool_result_message(results)
   assert msg.role == User
@@ -2774,7 +2793,7 @@ pub fn create_tool_result_message_test() {
 pub fn build_tool_result_messages_test() {
   let original = [user_message("What's the weather?")]
   let response = create_tool_use_response()
-  let results = [tool_success("toolu_1", "Sunny")]
+  let results = [ToolSuccess(tool_use_id: "toolu_1", content: "Sunny")]
 
   let messages = build_tool_result_messages(original, response, results)
   assert list.length(messages) == 3
@@ -2789,7 +2808,7 @@ pub fn build_tool_result_messages_test() {
 
 pub fn build_continuation_messages_test() {
   let response = create_tool_use_response()
-  let results = [tool_success("toolu_1", "Sunny")]
+  let results = [ToolSuccess(tool_use_id: "toolu_1", content: "Sunny")]
 
   let messages = build_continuation_messages(response, results)
   assert list.length(messages) == 2
@@ -2799,7 +2818,7 @@ pub fn build_continuation_messages_test() {
 }
 
 pub fn success_for_call_test() {
-  let call = tool_call("id_1", "tool", "{}")
+  let call = ToolCall(id: "id_1", name: "tool", input: "{}")
   let result = success_for_call(call, "Success content")
   let assert ToolSuccess(tool_use_id, content) = result
   assert tool_use_id == "id_1"
@@ -2807,7 +2826,7 @@ pub fn success_for_call_test() {
 }
 
 pub fn failure_for_call_test() {
-  let call = tool_call("id_1", "tool", "{}")
+  let call = ToolCall(id: "id_1", name: "tool", input: "{}")
   let result = failure_for_call(call, "Error message")
   let assert ToolFailure(tool_use_id, error) = result
   assert tool_use_id == "id_1"
@@ -2816,8 +2835,8 @@ pub fn failure_for_call_test() {
 
 pub fn execute_tool_calls_test() {
   let calls = [
-    tool_call("id_1", "tool1", "{}"),
-    tool_call("id_2", "tool2", "{}"),
+    ToolCall(id: "id_1", name: "tool1", input: "{}"),
+    ToolCall(id: "id_2", name: "tool2", input: "{}"),
   ]
 
   let handler = fn(call: ToolCall) {
@@ -2839,7 +2858,7 @@ pub fn execute_tool_calls_test() {
 }
 
 pub fn dispatch_tool_call_found_test() {
-  let call = tool_call("id_1", "get_weather", "{}")
+  let call = ToolCall(id: "id_1", name: "get_weather", input: "{}")
   let handlers = [
     #("get_weather", fn(_input: String) { Ok("Sunny") }),
     #("get_time", fn(_input: String) { Ok("12:00") }),
@@ -2851,7 +2870,7 @@ pub fn dispatch_tool_call_found_test() {
 }
 
 pub fn dispatch_tool_call_not_found_test() {
-  let call = tool_call("id_1", "unknown_tool", "{}")
+  let call = ToolCall(id: "id_1", name: "unknown_tool", input: "{}")
   let handlers = [#("get_weather", fn(_input: String) { Ok("Sunny") })]
 
   let result = dispatch_tool_call(call, handlers)
@@ -2861,8 +2880,8 @@ pub fn dispatch_tool_call_not_found_test() {
 
 pub fn dispatch_tool_calls_test() {
   let calls = [
-    tool_call("id_1", "get_weather", "{}"),
-    tool_call("id_2", "get_time", "{}"),
+    ToolCall(id: "id_1", name: "get_weather", input: "{}"),
+    ToolCall(id: "id_2", name: "get_time", input: "{}"),
   ]
   let handlers = [
     #("get_weather", fn(_input: String) { Ok("Sunny") }),
@@ -3402,7 +3421,13 @@ pub fn validate_stop_sequences_empty_item_test() {
 }
 
 pub fn validate_tools_valid_test() {
-  let tools = [tool("get_weather", empty_input_schema())]
+  let tools = [
+    Tool(
+      name: "get_weather",
+      description: None,
+      input_schema: empty_input_schema(),
+    ),
+  ]
   let result = validate_tools(Some(tools))
   assert result == Ok(Nil)
 }
@@ -3413,7 +3438,9 @@ pub fn validate_tools_none_test() {
 }
 
 pub fn validate_tools_empty_name_test() {
-  let tools = [tool("", empty_input_schema())]
+  let tools = [
+    Tool(name: "", description: None, input_schema: empty_input_schema()),
+  ]
   let result = validate_tools(Some(tools))
   assert result != Ok(Nil)
 }
@@ -3693,7 +3720,13 @@ pub fn hooks_summarize_request_with_options_test() {
     )
     |> with_stream(True)
     |> with_system("You are helpful")
-    |> with_tools([tool("test_tool", empty_input_schema())])
+    |> with_tools([
+      Tool(
+        name: "test_tool",
+        description: None,
+        input_schema: empty_input_schema(),
+      ),
+    ])
   let summary = summarize_request(request)
   assert summary.message_count == 3
   assert summary.max_tokens == 2048

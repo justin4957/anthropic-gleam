@@ -209,11 +209,11 @@ let weather_tool = tool_builder("get_weather")
 
 ```gleam
 import anthropic/types/request.{with_tool_choice, with_tools}
-import anthropic/types/tool.{auto_choice}
+import anthropic/types/tool.{Auto}
 
 let req = request.create_request(model, messages, max_tokens)
   |> with_tools([weather_tool])
-  |> with_tool_choice(auto_choice())
+  |> with_tool_choice(Auto)
 ```
 
 ### Handling Tool Calls
@@ -224,7 +224,7 @@ import anthropic/tools.{
   build_tool_result_messages, dispatch_tool_calls, extract_tool_calls,
   needs_tool_execution,
 }
-import anthropic/types/tool.{tool_success}
+import anthropic/types/tool.{ToolSuccess}
 
 case api.create_message(api_client, req) {
   Ok(response) -> {
@@ -234,8 +234,8 @@ case api.create_message(api_client, req) {
 
         // Execute tools using dispatch
         let handlers = [
-          #("get_weather", fn(_input) {
-            tool_success("{\"temp\": 72, \"condition\": \"sunny\"}")
+          #("get_weather", fn(tool_use_id, _input) {
+            ToolSuccess(tool_use_id: tool_use_id, content: "{\"temp\": 72, \"condition\": \"sunny\"}")
           }),
         ]
         let results = dispatch_tool_calls(calls, handlers)

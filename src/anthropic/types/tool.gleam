@@ -247,20 +247,6 @@ pub type Tool {
   )
 }
 
-/// Create a tool with no description
-pub fn tool(name: String, input_schema: InputSchema) -> Tool {
-  Tool(name: name, description: None, input_schema: input_schema)
-}
-
-/// Create a tool with a description
-pub fn tool_with_description(
-  name: String,
-  description: String,
-  input_schema: InputSchema,
-) -> Tool {
-  Tool(name: name, description: Some(description), input_schema: input_schema)
-}
-
 /// Encode a Tool to JSON
 pub fn tool_to_json(t: Tool) -> Json {
   let base_fields = [
@@ -316,26 +302,6 @@ pub fn tool_choice_to_json(choice: ToolChoice) -> Json {
   }
 }
 
-/// Create an Auto tool choice
-pub fn auto_choice() -> ToolChoice {
-  Auto
-}
-
-/// Create an Any tool choice
-pub fn any_choice() -> ToolChoice {
-  Any
-}
-
-/// Create a specific tool choice
-pub fn tool_name_choice(name: String) -> ToolChoice {
-  ToolName(name: name)
-}
-
-/// Create a NoTool choice
-pub fn no_tool_choice() -> ToolChoice {
-  NoTool
-}
-
 // =============================================================================
 // Tool Result Utilities
 // =============================================================================
@@ -350,11 +316,6 @@ pub type ToolCall {
     /// JSON string of input arguments
     input: String,
   )
-}
-
-/// Create a ToolCall
-pub fn tool_call(id: String, name: String, input: String) -> ToolCall {
-  ToolCall(id: id, name: name, input: input)
 }
 
 /// Represents the result of executing a tool
@@ -373,16 +334,6 @@ pub type ToolResult {
     /// Error message
     error: String,
   )
-}
-
-/// Create a successful tool result
-pub fn tool_success(tool_use_id: String, content: String) -> ToolResult {
-  ToolSuccess(tool_use_id: tool_use_id, content: content)
-}
-
-/// Create a failed tool result
-pub fn tool_failure(tool_use_id: String, error: String) -> ToolResult {
-  ToolFailure(tool_use_id: tool_use_id, error: error)
 }
 
 /// Get the tool_use_id from a ToolResult

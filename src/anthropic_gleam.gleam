@@ -113,7 +113,7 @@
 //// import anthropic/tools.{
 ////   needs_tool_execution, extract_tool_calls, dispatch_tool_calls
 //// }
-//// import anthropic/types/tool.{auto_choice, tool_success}
+//// import anthropic/types/tool.{Auto, ToolSuccess}
 //// import anthropic/types/request.{with_tools, with_tool_choice}
 ////
 //// // Define a tool
@@ -125,7 +125,7 @@
 //// // Add to request
 //// let req = request.create_request(model, messages, max_tokens)
 ////   |> with_tools([weather_tool])
-////   |> with_tool_choice(auto_choice())
+////   |> with_tool_choice(Auto)
 ////
 //// // Handle tool calls
 //// case api.create_message(api_client, req) {
@@ -134,8 +134,8 @@
 ////       True -> {
 ////         let calls = extract_tool_calls(response)
 ////         let handlers = [
-////           #("get_weather", fn(_input) {
-////             tool_success("{\"temp\": 72}")
+////           #("get_weather", fn(tool_use_id, _input) {
+////             ToolSuccess(tool_use_id: tool_use_id, content: "{\"temp\": 72}")
 ////           }),
 ////         ]
 ////         let results = dispatch_tool_calls(calls, handlers)

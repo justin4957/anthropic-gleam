@@ -25,6 +25,7 @@ import anthropic/types/tool.{
 }
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/string
 
 // =============================================================================
 // Builder Types
@@ -339,7 +340,7 @@ pub fn validate_name(name: String) -> Result(String, ToolBuilderError) {
   case name {
     "" -> Error(EmptyName)
     _ -> {
-      let length = string_length(name)
+      let length = string.length(name)
       case length > 64 {
         True -> Error(NameTooLong(name: name, length: length))
         False -> {
@@ -378,7 +379,7 @@ pub fn build_validated(builder: ToolBuilder) -> Result(Tool, ToolBuilderError) {
 /// Check if a string only contains valid tool name characters
 fn is_valid_tool_name(name: String) -> Bool {
   name
-  |> string_to_graphemes
+  |> string.to_graphemes
   |> list.all(fn(char) { is_alphanumeric(char) || char == "_" || char == "-" })
 }
 
@@ -475,14 +476,4 @@ fn find_first_duplicate_helper(
       }
     }
   }
-}
-
-import gleam/string
-
-fn string_length(s: String) -> Int {
-  string.length(s)
-}
-
-fn string_to_graphemes(s: String) -> List(String) {
-  string.to_graphemes(s)
 }
