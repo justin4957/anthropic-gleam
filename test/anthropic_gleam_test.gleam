@@ -1,7 +1,7 @@
 import anthropic/config.{
-  config_options, default_base_url, default_max_retries, default_timeout_ms,
-  load_config, with_api_key, with_base_url, with_default_model, with_max_retries,
-  with_timeout_ms,
+  api_key_to_string, config_options, default_base_url, default_max_retries,
+  default_timeout_ms, load_config, with_api_key, with_base_url,
+  with_default_model, with_max_retries, with_timeout_ms,
 }
 import anthropic/hooks.{
   ContentBlockDelta, ContentBlockStart, ContentBlockStop, MessageDelta,
@@ -50,11 +50,12 @@ import anthropic/types/request.{
   with_tools_and_choice, with_top_k, with_top_p, with_user_id,
 }
 import anthropic/types/tool.{
-  type ToolCall, Any, Auto, NoTool, Tool, ToolCall, ToolFailure, ToolName,
-  ToolSuccess, array_property, empty_input_schema, enum_property, input_schema,
-  input_schema_to_json, object_property, property, property_schema_to_json,
-  property_with_description, tool_choice_to_json, tool_to_json,
-  tool_to_json_string, tools_to_json,
+  type ToolCall, Any, Auto, EmptyToolName, NoTool, SpecificTool, Tool, ToolCall,
+  ToolFailure, ToolSuccess, array_property, empty_input_schema, enum_property,
+  input_schema, input_schema_to_json, object_property, property,
+  property_schema_to_json, property_with_description, tool_choice_to_json,
+  tool_name_to_string, tool_name_unchecked, tool_to_json, tool_to_json_string,
+  tools_to_json,
 }
 import anthropic/validation.{
   MaxTokensField, MessagesField, ModelField, StopSequencesField, SystemField,
@@ -1204,7 +1205,7 @@ pub fn load_config_from_env_test() {
   set_env("ANTHROPIC_API_KEY", "env-key")
   let assert Ok(config) = load_config(config_options())
 
-  assert config.api_key == "env-key"
+  assert api_key_to_string(config.api_key) == "env-key"
   assert config.base_url == default_base_url
   assert config.default_model == None
   assert config.timeout_ms == default_timeout_ms
@@ -1224,7 +1225,7 @@ pub fn load_config_prefers_explicit_values_test() {
 
   let assert Ok(config) = load_config(options)
 
-  assert config.api_key == "explicit-key"
+  assert api_key_to_string(config.api_key) == "explicit-key"
   assert config.base_url == "https://proxy.example"
   assert config.default_model == Some("claude-proxy")
   assert config.timeout_ms == 10_000
@@ -1250,7 +1251,7 @@ pub fn client_new_test() {
   set_env("ANTHROPIC_API_KEY", "test-key")
   let assert Ok(config) = load_config(config_options())
   let client = new(config)
-  assert client.config.api_key == "test-key"
+  assert api_key_to_string(client.config.api_key) == "test-key"
 }
 
 pub fn client_api_version_test() {
@@ -2481,29 +2482,29 @@ pub fn input_schema_to_json_test() {
 pub fn tool_simple_test() {
   let t =
     Tool(
-      name: "get_time",
+      name: tool_name_unchecked("get_time"),
       description: None,
       input_schema: empty_input_schema(),
     )
-  assert t.name == "get_time"
+  assert tool_name_to_string(t.name) == "get_time"
   assert t.description == None
 }
 
 pub fn tool_with_description_test() {
   let t =
     Tool(
-      name: "get_time",
+      name: tool_name_unchecked("get_time"),
       description: Some("Get current time"),
       input_schema: empty_input_schema(),
     )
-  assert t.name == "get_time"
+  assert tool_name_to_string(t.name) == "get_time"
   assert t.description == Some("Get current time")
 }
 
 pub fn tool_to_json_test() {
   let t =
     Tool(
-      name: "get_weather",
+      name: tool_name_unchecked("get_weather"),
       description: Some("Get weather"),
       input_schema: empty_input_schema(),
     )
@@ -2515,16 +2516,28 @@ pub fn tool_to_json_test() {
 
 pub fn tool_to_json_string_test() {
   let t =
-    Tool(name: "my_tool", description: None, input_schema: empty_input_schema())
+    Tool(
+      name: tool_name_unchecked("my_tool"),
+      description: None,
+      input_schema: empty_input_schema(),
+    )
   let json_str = tool_to_json_string(t)
   assert string.contains(json_str, "\"name\":\"my_tool\"")
 }
 
 pub fn tools_to_json_test() {
   let t1 =
-    Tool(name: "tool1", description: None, input_schema: empty_input_schema())
+    Tool(
+      name: tool_name_unchecked("tool1"),
+      description: None,
+      input_schema: empty_input_schema(),
+    )
   let t2 =
-    Tool(name: "tool2", description: None, input_schema: empty_input_schema())
+    Tool(
+      name: tool_name_unchecked("tool2"),
+      description: None,
+      input_schema: empty_input_schema(),
+    )
   let json_str = tools_to_json([t1, t2]) |> json.to_string
   assert string.contains(json_str, "\"name\":\"tool1\"")
   assert string.contains(json_str, "\"name\":\"tool2\"")
@@ -2553,7 +2566,7 @@ pub fn tool_choice_none_test() {
 }
 
 pub fn tool_choice_specific_test() {
-  let choice = ToolName(name: "get_weather")
+  let choice = SpecificTool(name: "get_weather")
   let json_str = tool_choice_to_json(choice) |> json.to_string
   assert string.contains(json_str, "\"type\":\"tool\"")
   assert string.contains(json_str, "\"name\":\"get_weather\"")
@@ -2596,7 +2609,7 @@ pub fn tool_failure_test() {
 pub fn request_with_tools_test() {
   let t =
     Tool(
-      name: "get_weather",
+      name: tool_name_unchecked("get_weather"),
       description: None,
       input_schema: empty_input_schema(),
     )
@@ -2618,7 +2631,7 @@ pub fn request_with_tool_choice_test() {
 pub fn request_with_tools_and_choice_test() {
   let t =
     Tool(
-      name: "get_weather",
+      name: tool_name_unchecked("get_weather"),
       description: None,
       input_schema: empty_input_schema(),
     )
@@ -2633,7 +2646,7 @@ pub fn request_with_tools_and_choice_test() {
 pub fn request_with_tools_to_json_test() {
   let t =
     Tool(
-      name: "get_weather",
+      name: tool_name_unchecked("get_weather"),
       description: Some("Get weather"),
       input_schema: empty_input_schema(),
     )
@@ -2903,10 +2916,10 @@ pub fn dispatch_tool_calls_test() {
 // =============================================================================
 
 import anthropic/tools/builder.{
-  add_boolean_param, add_enum_param, add_integer_param, add_number_param,
-  add_object_param, add_string_array_param, add_string_param, build,
-  build_simple, build_validated, tool_builder, tool_builder_with_description,
-  with_description as builder_with_description,
+  InvalidToolName, add_boolean_param, add_enum_param, add_integer_param,
+  add_number_param, add_object_param, add_string_array_param, add_string_param,
+  build, build_simple, build_validated, tool_builder,
+  tool_builder_with_description, with_description as builder_with_description,
 }
 
 pub fn tool_builder_simple_test() {
@@ -2914,7 +2927,7 @@ pub fn tool_builder_simple_test() {
     tool_builder("get_time")
     |> build_simple
 
-  assert t.name == "get_time"
+  assert tool_name_to_string(t.name) == "get_time"
   assert t.description == None
   assert t.input_schema.properties == None
 }
@@ -2924,7 +2937,7 @@ pub fn tool_builder_with_description_init_test() {
     tool_builder_with_description("get_time", "Get current time")
     |> build_simple
 
-  assert t.name == "get_time"
+  assert tool_name_to_string(t.name) == "get_time"
   assert t.description == Some("Get current time")
 }
 
@@ -3066,7 +3079,11 @@ pub fn tool_builder_validated_success_test() {
     tool_builder("valid_name")
     |> build_validated
 
-  assert result != Error(builder.EmptyName)
+  // Should succeed - not an error
+  case result {
+    Ok(_) -> Nil
+    Error(_) -> panic as "Expected Ok but got Error"
+  }
 }
 
 pub fn tool_builder_validated_empty_name_test() {
@@ -3074,7 +3091,90 @@ pub fn tool_builder_validated_empty_name_test() {
     tool_builder("")
     |> build_validated
 
-  assert result == Error(builder.EmptyName)
+  assert result == Error(InvalidToolName(EmptyToolName))
+}
+
+// =============================================================================
+// Opaque Type Tests (Issue #11)
+// =============================================================================
+
+import anthropic/types/tool.{
+  InvalidToolNameCharacters, ToolNameTooLong, tool_name,
+  tool_name_error_to_string,
+} as tool_module
+
+pub fn tool_name_valid_test() {
+  // Valid tool names
+  let assert Ok(name) = tool_name("get_weather")
+  assert tool_name_to_string(name) == "get_weather"
+
+  let assert Ok(name2) = tool_name("my-tool_123")
+  assert tool_name_to_string(name2) == "my-tool_123"
+}
+
+pub fn tool_name_empty_error_test() {
+  let result = tool_name("")
+  assert result == Error(EmptyToolName)
+}
+
+pub fn tool_name_invalid_chars_error_test() {
+  let result = tool_name("has spaces")
+  let assert Error(InvalidToolNameCharacters(_)) = result
+}
+
+pub fn tool_name_too_long_error_test() {
+  // Create a name with 65 characters (1 over the limit)
+  let long_name =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  let result = tool_name(long_name)
+  let assert Error(ToolNameTooLong(_, length)) = result
+  assert length == 65
+}
+
+pub fn tool_name_error_to_string_test() {
+  let empty_msg = tool_name_error_to_string(EmptyToolName)
+  assert string.contains(empty_msg, "empty")
+
+  let invalid_msg = tool_name_error_to_string(InvalidToolNameCharacters("bad"))
+  assert string.contains(invalid_msg, "invalid")
+  assert string.contains(invalid_msg, "bad")
+
+  let long_msg = tool_name_error_to_string(ToolNameTooLong("x", 100))
+  assert string.contains(long_msg, "too long")
+}
+
+import anthropic/config.{
+  EmptyApiKey, api_key, api_key_error_to_string, api_key_unchecked,
+} as config_module
+
+pub fn api_key_valid_test() {
+  let assert Ok(key) = api_key("sk-ant-test")
+  assert api_key_to_string(key) == "sk-ant-test"
+}
+
+pub fn api_key_empty_error_test() {
+  let result = api_key("")
+  assert result == Error(EmptyApiKey)
+}
+
+pub fn api_key_whitespace_only_error_test() {
+  let result = api_key("   ")
+  assert result == Error(EmptyApiKey)
+}
+
+pub fn api_key_trimmed_test() {
+  let assert Ok(key) = api_key("  sk-ant-test  ")
+  assert api_key_to_string(key) == "sk-ant-test"
+}
+
+pub fn api_key_unchecked_test() {
+  let key = api_key_unchecked("my-key")
+  assert api_key_to_string(key) == "my-key"
+}
+
+pub fn api_key_error_to_string_test() {
+  let msg = api_key_error_to_string(EmptyApiKey)
+  assert string.contains(msg, "empty")
 }
 
 // =============================================================================
@@ -3423,7 +3523,7 @@ pub fn validate_stop_sequences_empty_item_test() {
 pub fn validate_tools_valid_test() {
   let tools = [
     Tool(
-      name: "get_weather",
+      name: tool_name_unchecked("get_weather"),
       description: None,
       input_schema: empty_input_schema(),
     ),
@@ -3437,13 +3537,10 @@ pub fn validate_tools_none_test() {
   assert result == Ok(Nil)
 }
 
-pub fn validate_tools_empty_name_test() {
-  let tools = [
-    Tool(name: "", description: None, input_schema: empty_input_schema()),
-  ]
-  let result = validate_tools(Some(tools))
-  assert result != Ok(Nil)
-}
+// Note: validate_tools_empty_name_test was removed because ToolName is now
+// an opaque type that validates at construction. Invalid tool names cannot
+// be created through the type system. The test for empty names is now
+// in tool_builder_validated_empty_name_test and tool_name_error_test.
 
 pub fn validate_request_valid_test() {
   let request =
@@ -3722,7 +3819,7 @@ pub fn hooks_summarize_request_with_options_test() {
     |> with_system("You are helpful")
     |> with_tools([
       Tool(
-        name: "test_tool",
+        name: tool_name_unchecked("test_tool"),
         description: None,
         input_schema: empty_input_schema(),
       ),

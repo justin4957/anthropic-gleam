@@ -6,8 +6,12 @@
 //// ## Example
 ////
 //// ```gleam
+//// import anthropic/types/tool.{tool_name, Tool, InputSchema}
+//// import gleam/option.{None, Some}
+////
+//// let assert Ok(name) = tool_name("get_weather")
 //// let weather_tool = Tool(
-////   name: "get_weather",
+////   name: name,
 ////   description: Some("Get the current weather for a location"),
 ////   input_schema: InputSchema(
 ////     schema_type: "object",
@@ -26,6 +30,182 @@
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/string
+
+// =============================================================================
+// ToolName - Validated tool name (opaque type)
+// =============================================================================
+
+/// Error when creating a ToolName
+pub type ToolNameError {
+  /// Tool name is empty
+  EmptyToolName
+  /// Tool name contains invalid characters (must match ^[a-zA-Z0-9_-]+$)
+  InvalidToolNameCharacters(name: String)
+  /// Tool name exceeds maximum length of 64 characters
+  ToolNameTooLong(name: String, length: Int)
+}
+
+/// A validated tool name that conforms to Anthropic's requirements.
+///
+/// Tool names must match the regex pattern `^[a-zA-Z0-9_-]{1,64}$`:
+/// - Only alphanumeric characters, underscores, and hyphens
+/// - Between 1 and 64 characters in length
+///
+/// Use `tool_name()` to create a validated ToolName, or `tool_name_unchecked()`
+/// for cases where you trust the input (e.g., constants or API responses).
+pub opaque type ToolName {
+  ToolName(name: String)
+}
+
+/// Create a validated tool name.
+///
+/// Returns `Ok(ToolName)` if the name matches Anthropic's requirements:
+/// - Non-empty
+/// - Only alphanumeric characters, underscores, and hyphens
+/// - Maximum 64 characters
+///
+/// ## Examples
+///
+/// ```gleam
+/// tool_name("get_weather")  // Ok(ToolName)
+/// tool_name("my-tool-123")  // Ok(ToolName)
+/// tool_name("")             // Error(EmptyToolName)
+/// tool_name("has spaces")   // Error(InvalidToolNameCharacters(...))
+/// ```
+pub fn tool_name(raw: String) -> Result(ToolName, ToolNameError) {
+  case raw {
+    "" -> Error(EmptyToolName)
+    _ -> {
+      let length = string.length(raw)
+      case length > 64 {
+        True -> Error(ToolNameTooLong(name: raw, length: length))
+        False -> {
+          case is_valid_tool_name_string(raw) {
+            True -> Ok(ToolName(raw))
+            False -> Error(InvalidToolNameCharacters(name: raw))
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Create a ToolName without validation.
+///
+/// Use this only when you trust the input, such as:
+/// - Compile-time constants
+/// - Values received from the Anthropic API
+/// - Values already validated elsewhere
+///
+/// For user input or untrusted sources, use `tool_name()` instead.
+pub fn tool_name_unchecked(raw: String) -> ToolName {
+  ToolName(raw)
+}
+
+/// Get the raw string value from a ToolName.
+///
+/// Use this when you need to serialize the name to JSON or display it.
+pub fn tool_name_to_string(name: ToolName) -> String {
+  name.name
+}
+
+/// Convert a ToolNameError to a human-readable string.
+pub fn tool_name_error_to_string(error: ToolNameError) -> String {
+  case error {
+    EmptyToolName -> "Tool name cannot be empty"
+    InvalidToolNameCharacters(name) ->
+      "Tool name '"
+      <> name
+      <> "' contains invalid characters (only a-z, A-Z, 0-9, _, - allowed)"
+    ToolNameTooLong(name, length) ->
+      "Tool name '"
+      <> name
+      <> "' is too long ("
+      <> string.inspect(length)
+      <> " characters, max 64)"
+  }
+}
+
+/// Check if a string only contains valid tool name characters
+fn is_valid_tool_name_string(name: String) -> Bool {
+  name
+  |> string.to_graphemes
+  |> list.all(fn(char) { is_alphanumeric(char) || char == "_" || char == "-" })
+}
+
+/// Check if a character is alphanumeric (a-z, A-Z, 0-9)
+fn is_alphanumeric(char: String) -> Bool {
+  let lower =
+    char == "a"
+    || char == "b"
+    || char == "c"
+    || char == "d"
+    || char == "e"
+    || char == "f"
+    || char == "g"
+    || char == "h"
+    || char == "i"
+    || char == "j"
+    || char == "k"
+    || char == "l"
+    || char == "m"
+    || char == "n"
+    || char == "o"
+    || char == "p"
+    || char == "q"
+    || char == "r"
+    || char == "s"
+    || char == "t"
+    || char == "u"
+    || char == "v"
+    || char == "w"
+    || char == "x"
+    || char == "y"
+    || char == "z"
+
+  let upper =
+    char == "A"
+    || char == "B"
+    || char == "C"
+    || char == "D"
+    || char == "E"
+    || char == "F"
+    || char == "G"
+    || char == "H"
+    || char == "I"
+    || char == "J"
+    || char == "K"
+    || char == "L"
+    || char == "M"
+    || char == "N"
+    || char == "O"
+    || char == "P"
+    || char == "Q"
+    || char == "R"
+    || char == "S"
+    || char == "T"
+    || char == "U"
+    || char == "V"
+    || char == "W"
+    || char == "X"
+    || char == "Y"
+    || char == "Z"
+
+  let digit =
+    char == "0"
+    || char == "1"
+    || char == "2"
+    || char == "3"
+    || char == "4"
+    || char == "5"
+    || char == "6"
+    || char == "7"
+    || char == "8"
+    || char == "9"
+
+  lower || upper || digit
+}
 
 // =============================================================================
 // PropertySchema - Schema for individual properties
@@ -238,8 +418,8 @@ pub fn input_schema_to_json(schema: InputSchema) -> Json {
 /// A tool definition that can be provided to Claude
 pub type Tool {
   Tool(
-    /// The name of the tool (must match the regex ^[a-zA-Z0-9_-]{1,64}$)
-    name: String,
+    /// The validated name of the tool
+    name: ToolName,
     /// Human-readable description of what the tool does
     description: Option(String),
     /// JSON Schema defining the tool's input parameters
@@ -250,7 +430,7 @@ pub type Tool {
 /// Encode a Tool to JSON
 pub fn tool_to_json(t: Tool) -> Json {
   let base_fields = [
-    #("name", json.string(t.name)),
+    #("name", json.string(tool_name_to_string(t.name))),
     #("input_schema", input_schema_to_json(t.input_schema)),
   ]
 
@@ -285,8 +465,8 @@ pub type ToolChoice {
   Auto
   /// Claude must use one of the provided tools
   Any
-  /// Claude must use the specified tool
-  ToolName(name: String)
+  /// Claude must use the specified tool (by name)
+  SpecificTool(name: String)
   /// Claude should not use any tools (respond directly)
   NoTool
 }
@@ -296,7 +476,7 @@ pub fn tool_choice_to_json(choice: ToolChoice) -> Json {
   case choice {
     Auto -> json.object([#("type", json.string("auto"))])
     Any -> json.object([#("type", json.string("any"))])
-    ToolName(name) ->
+    SpecificTool(name) ->
       json.object([#("type", json.string("tool")), #("name", json.string(name))])
     NoTool -> json.object([#("type", json.string("none"))])
   }

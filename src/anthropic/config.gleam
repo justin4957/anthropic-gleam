@@ -23,14 +23,77 @@ pub const default_timeout_ms = 60_000
 pub const default_max_retries = 3
 
 // =============================================================================
+// ApiKey - Validated API key (opaque type)
+// =============================================================================
+
+/// Error when creating an ApiKey
+pub type ApiKeyError {
+  /// API key is empty or whitespace-only
+  EmptyApiKey
+}
+
+/// A validated API key for Anthropic API authentication.
+///
+/// API keys must be non-empty after trimming whitespace.
+/// Use `api_key()` to create a validated ApiKey from user input,
+/// or `api_key_unchecked()` for trusted sources like environment variables.
+pub opaque type ApiKey {
+  ApiKey(key: String)
+}
+
+/// Create a validated API key.
+///
+/// Returns `Ok(ApiKey)` if the key is non-empty after trimming whitespace.
+///
+/// ## Examples
+///
+/// ```gleam
+/// api_key("sk-ant-...")  // Ok(ApiKey)
+/// api_key("")            // Error(EmptyApiKey)
+/// api_key("   ")         // Error(EmptyApiKey)
+/// ```
+pub fn api_key(raw: String) -> Result(ApiKey, ApiKeyError) {
+  let trimmed = string.trim(raw)
+  case string.length(trimmed) {
+    0 -> Error(EmptyApiKey)
+    _ -> Ok(ApiKey(trimmed))
+  }
+}
+
+/// Create an ApiKey without validation.
+///
+/// Use this only when you trust the input, such as:
+/// - Values from environment variables (already validated during load)
+/// - Values from secure configuration systems
+///
+/// For user input or untrusted sources, use `api_key()` instead.
+pub fn api_key_unchecked(raw: String) -> ApiKey {
+  ApiKey(raw)
+}
+
+/// Get the raw string value from an ApiKey.
+///
+/// Use this when you need to include the key in HTTP headers.
+pub fn api_key_to_string(key: ApiKey) -> String {
+  key.key
+}
+
+/// Convert an ApiKeyError to a human-readable string.
+pub fn api_key_error_to_string(error: ApiKeyError) -> String {
+  case error {
+    EmptyApiKey -> "API key cannot be empty"
+  }
+}
+
+// =============================================================================
 // Types
 // =============================================================================
 
 /// Configuration for Anthropic client requests
 pub type Config {
   Config(
-    /// API key used for authentication
-    api_key: String,
+    /// Validated API key used for authentication
+    api_key: ApiKey,
     /// Base URL for Anthropic API requests
     base_url: String,
     /// Optional default model name
@@ -114,7 +177,7 @@ pub fn with_max_retries(
 /// 1. Explicit options passed to the client
 /// 2. Environment variables (ANTHROPIC_API_KEY)
 pub fn load_config(options: ConfigOptions) -> Result(Config, AnthropicError) {
-  let api_key =
+  let key_result =
     pick_api_key(options.api_key)
     |> result.map_error(fn(_) {
       config_error(
@@ -122,7 +185,7 @@ pub fn load_config(options: ConfigOptions) -> Result(Config, AnthropicError) {
       )
     })
 
-  api_key
+  key_result
   |> result.map(fn(key) {
     Config(
       api_key: key,
@@ -138,18 +201,18 @@ pub fn load_config(options: ConfigOptions) -> Result(Config, AnthropicError) {
 // Helpers
 // =============================================================================
 
-fn pick_api_key(provided: Option(String)) -> Result(String, Nil) {
+fn pick_api_key(provided: Option(String)) -> Result(ApiKey, Nil) {
   case normalise_string_option(provided) {
-    Some(key) -> Ok(key)
+    Some(key) -> Ok(api_key_unchecked(key))
     None -> load_env_api_key()
   }
 }
 
-fn load_env_api_key() -> Result(String, Nil) {
+fn load_env_api_key() -> Result(ApiKey, Nil) {
   let value = getenv("ANTHROPIC_API_KEY", "")
 
   case normalise_string_option(Some(value)) {
-    Some(key) -> Ok(key)
+    Some(key) -> Ok(api_key_unchecked(key))
     None -> Error(Nil)
   }
 }

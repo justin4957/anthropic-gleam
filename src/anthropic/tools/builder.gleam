@@ -21,11 +21,13 @@
 //// ```
 
 import anthropic/types/tool.{
-  type PropertySchema, type Tool, InputSchema, PropertySchema, Tool,
+  type PropertySchema, type Tool, type ToolName, type ToolNameError, InputSchema,
+  PropertySchema, Tool, tool_name, tool_name_error_to_string,
+  tool_name_unchecked,
 }
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/string
+import gleam/result
 
 // =============================================================================
 // Builder Types
@@ -283,7 +285,10 @@ pub fn add_object_param(
 // Build Methods
 // =============================================================================
 
-/// Build the tool from the builder state
+/// Build the tool from the builder state without validation.
+///
+/// Use this when you trust the tool name is valid (e.g., hardcoded constants).
+/// For untrusted input, use `build_validated()` instead.
 pub fn build(builder: ToolBuilder) -> Tool {
   let input_schema = case builder.properties {
     [] -> InputSchema(schema_type: "object", properties: None, required: None)
@@ -299,16 +304,19 @@ pub fn build(builder: ToolBuilder) -> Tool {
   }
 
   Tool(
-    name: builder.name,
+    name: tool_name_unchecked(builder.name),
     description: builder.description,
     input_schema: input_schema,
   )
 }
 
-/// Build a simple tool with no parameters
+/// Build a simple tool with no parameters without validation.
+///
+/// Use this when you trust the tool name is valid (e.g., hardcoded constants).
+/// For untrusted input, use `build_validated()` instead.
 pub fn build_simple(builder: ToolBuilder) -> Tool {
   Tool(
-    name: builder.name,
+    name: tool_name_unchecked(builder.name),
     description: builder.description,
     input_schema: InputSchema(
       schema_type: "object",
@@ -324,41 +332,41 @@ pub fn build_simple(builder: ToolBuilder) -> Tool {
 
 /// Validation error for tool definitions
 pub type ToolBuilderError {
-  /// Tool name is empty
-  EmptyName
-  /// Tool name contains invalid characters
-  InvalidNameCharacters(name: String)
-  /// Tool name is too long (max 64 characters)
-  NameTooLong(name: String, length: Int)
+  /// Tool name validation failed
+  InvalidToolName(error: ToolNameError)
   /// Duplicate property name
   DuplicateProperty(name: String)
 }
 
-/// Validate a tool name according to Anthropic's requirements
-/// Must match regex: ^[a-zA-Z0-9_-]{1,64}$
-pub fn validate_name(name: String) -> Result(String, ToolBuilderError) {
-  case name {
-    "" -> Error(EmptyName)
-    _ -> {
-      let length = string.length(name)
-      case length > 64 {
-        True -> Error(NameTooLong(name: name, length: length))
-        False -> {
-          case is_valid_tool_name(name) {
-            True -> Ok(name)
-            False -> Error(InvalidNameCharacters(name: name))
-          }
-        }
-      }
-    }
+/// Convert a ToolBuilderError to a human-readable string
+pub fn builder_error_to_string(error: ToolBuilderError) -> String {
+  case error {
+    InvalidToolName(name_error) -> tool_name_error_to_string(name_error)
+    DuplicateProperty(name) -> "Duplicate property name: " <> name
   }
 }
 
-/// Build and validate the tool
+/// Validate a tool name according to Anthropic's requirements.
+///
+/// Must match regex: ^[a-zA-Z0-9_-]{1,64}$
+///
+/// Returns the validated ToolName on success.
+pub fn validate_name(name: String) -> Result(ToolName, ToolBuilderError) {
+  tool_name(name)
+  |> result.map_error(InvalidToolName)
+}
+
+/// Build and validate the tool.
+///
+/// This validates that:
+/// - The tool name matches Anthropic's requirements (alphanumeric, _, -, 1-64 chars)
+/// - No duplicate property names exist
+///
+/// Use this for user-provided or untrusted tool names.
 pub fn build_validated(builder: ToolBuilder) -> Result(Tool, ToolBuilderError) {
   case validate_name(builder.name) {
     Error(err) -> Error(err)
-    Ok(_) -> {
+    Ok(validated_name) -> {
       // Check for duplicate properties
       let prop_names = list.map(builder.properties, fn(p) { p.0 })
       case has_duplicates(prop_names) {
@@ -366,7 +374,30 @@ pub fn build_validated(builder: ToolBuilder) -> Result(Tool, ToolBuilderError) {
           let dup = find_first_duplicate(prop_names)
           Error(DuplicateProperty(name: option.unwrap(dup, "")))
         }
-        False -> Ok(build(builder))
+        False -> {
+          let input_schema = case builder.properties {
+            [] ->
+              InputSchema(
+                schema_type: "object",
+                properties: None,
+                required: None,
+              )
+            props ->
+              InputSchema(
+                schema_type: "object",
+                properties: Some(props),
+                required: case builder.required {
+                  [] -> None
+                  reqs -> Some(reqs)
+                },
+              )
+          }
+          Ok(Tool(
+            name: validated_name,
+            description: builder.description,
+            input_schema: input_schema,
+          ))
+        }
       }
     }
   }
@@ -375,85 +406,6 @@ pub fn build_validated(builder: ToolBuilder) -> Result(Tool, ToolBuilderError) {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/// Check if a string only contains valid tool name characters
-fn is_valid_tool_name(name: String) -> Bool {
-  name
-  |> string.to_graphemes
-  |> list.all(fn(char) { is_alphanumeric(char) || char == "_" || char == "-" })
-}
-
-fn is_alphanumeric(char: String) -> Bool {
-  let lower =
-    char == "a"
-    || char == "b"
-    || char == "c"
-    || char == "d"
-    || char == "e"
-    || char == "f"
-    || char == "g"
-    || char == "h"
-    || char == "i"
-    || char == "j"
-    || char == "k"
-    || char == "l"
-    || char == "m"
-    || char == "n"
-    || char == "o"
-    || char == "p"
-    || char == "q"
-    || char == "r"
-    || char == "s"
-    || char == "t"
-    || char == "u"
-    || char == "v"
-    || char == "w"
-    || char == "x"
-    || char == "y"
-    || char == "z"
-
-  let upper =
-    char == "A"
-    || char == "B"
-    || char == "C"
-    || char == "D"
-    || char == "E"
-    || char == "F"
-    || char == "G"
-    || char == "H"
-    || char == "I"
-    || char == "J"
-    || char == "K"
-    || char == "L"
-    || char == "M"
-    || char == "N"
-    || char == "O"
-    || char == "P"
-    || char == "Q"
-    || char == "R"
-    || char == "S"
-    || char == "T"
-    || char == "U"
-    || char == "V"
-    || char == "W"
-    || char == "X"
-    || char == "Y"
-    || char == "Z"
-
-  let digit =
-    char == "0"
-    || char == "1"
-    || char == "2"
-    || char == "3"
-    || char == "4"
-    || char == "5"
-    || char == "6"
-    || char == "7"
-    || char == "8"
-    || char == "9"
-
-  lower || upper || digit
-}
 
 fn has_duplicates(items: List(String)) -> Bool {
   list.length(items) != list.length(list.unique(items))
