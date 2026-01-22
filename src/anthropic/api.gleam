@@ -9,9 +9,8 @@ import anthropic/types/error.{type AnthropicError}
 import anthropic/types/request.{
   type CreateMessageRequest, type CreateMessageResponse,
 }
-import gleam/list
+import anthropic/validation
 import gleam/result
-import gleam/string
 
 // =============================================================================
 // Message Creation
@@ -38,8 +37,8 @@ pub fn create_message(
   client: Client,
   request: CreateMessageRequest,
 ) -> Result(CreateMessageResponse, AnthropicError) {
-  // Validate the request
-  use _ <- result.try(validate_request(request))
+  // Validate the request using shared validation module
+  use _ <- result.try(validation.validate_request_or_error(request))
 
   // Encode request to JSON
   let body = request.request_to_json_string(request)
@@ -53,36 +52,6 @@ pub fn create_message(
 
   // Parse the response
   parse_response(response_body)
-}
-
-// =============================================================================
-// Request Validation
-// =============================================================================
-
-/// Validate a CreateMessageRequest before sending
-fn validate_request(
-  request: CreateMessageRequest,
-) -> Result(Nil, AnthropicError) {
-  // Check for empty messages
-  case list.is_empty(request.messages) {
-    True -> Error(error.invalid_request_error("messages list cannot be empty"))
-    False -> Ok(Nil)
-  }
-  |> result.try(fn(_) {
-    // Check for valid model name
-    case string.is_empty(string.trim(request.model)) {
-      True -> Error(error.invalid_request_error("model name cannot be empty"))
-      False -> Ok(Nil)
-    }
-  })
-  |> result.try(fn(_) {
-    // Check for positive max_tokens
-    case request.max_tokens > 0 {
-      True -> Ok(Nil)
-      False ->
-        Error(error.invalid_request_error("max_tokens must be greater than 0"))
-    }
-  })
 }
 
 // =============================================================================

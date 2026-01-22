@@ -564,6 +564,23 @@ pub fn validate_or_error(
   }
 }
 
+/// Validate a request and return Result(Nil, AnthropicError)
+///
+/// This is a convenience function for cases where you only need to know
+/// if validation passed, not the request itself. Used internally by
+/// `api.gleam` and `http.gleam`.
+pub fn validate_request_or_error(
+  request: CreateMessageRequest,
+) -> Result(Nil, AnthropicError) {
+  case validate_request(request) {
+    Ok(_) -> Ok(Nil)
+    Error(errors) ->
+      Error(error.invalid_request_error(
+        "Request validation failed: " <> errors_to_string(errors),
+      ))
+  }
+}
+
 // =============================================================================
 // Content Validation
 // =============================================================================
