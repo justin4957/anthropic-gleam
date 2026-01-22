@@ -487,50 +487,15 @@ pub fn validate_tools(
 }
 
 /// Validate a single tool definition
-fn validate_single_tool(t: Tool, index: Int) -> List(ValidationError) {
-  let prefix = "tools[" <> int.to_string(index) <> "]"
-  let errors = []
-
-  // Validate tool name
-  let errors = case string.is_empty(string.trim(t.name)) {
-    True -> [
-      validation_error_with_value(
-        ToolsField,
-        "tool name cannot be empty",
-        prefix,
-      ),
-      ..errors
-    ]
-    False -> errors
-  }
-
-  // Validate tool name format (alphanumeric, underscores, hyphens, max 64 chars)
-  let errors = case is_valid_tool_name(t.name) {
-    True -> errors
-    False -> [
-      validation_error_with_value(
-        ToolsField,
-        "tool name must match ^[a-zA-Z0-9_-]{1,64}$",
-        prefix <> ".name=" <> t.name,
-      ),
-      ..errors
-    ]
-  }
-
-  errors
-}
-
-/// Check if a tool name is valid
-fn is_valid_tool_name(name: String) -> Bool {
-  let len = string.length(name)
-  // Must be 1-64 characters, alphanumeric, underscores, hyphens
-  len >= 1
-  && len <= 64
-  && {
-    name
-    |> string.to_graphemes
-    |> list.all(fn(char) { is_alphanumeric(char) || char == "_" || char == "-" })
-  }
+///
+/// Note: Since ToolName is now an opaque type that validates at construction,
+/// tool name validation is guaranteed by the type system. This function is
+/// kept for potential future validation of other tool properties.
+fn validate_single_tool(_t: Tool, _index: Int) -> List(ValidationError) {
+  // Tool names are now validated at construction time via the opaque ToolName type.
+  // The type system guarantees that any Tool has a valid name.
+  // Additional tool validation could be added here in the future.
+  []
 }
 
 // =============================================================================

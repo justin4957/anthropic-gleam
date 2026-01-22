@@ -57,6 +57,7 @@
 //// Use sans-io incremental parsing for true real-time streaming.
 
 import anthropic/client.{type Client}
+import anthropic/config.{api_key_to_string}
 import anthropic/http
 import anthropic/streaming/decoder
 import anthropic/streaming/sse
@@ -413,7 +414,10 @@ fn make_streaming_request(
     req
     |> request.set_method(gleam_http.Post)
     |> request.set_header("content-type", "application/json")
-    |> request.set_header("x-api-key", api_client.config.api_key)
+    |> request.set_header(
+      "x-api-key",
+      api_key_to_string(api_client.config.api_key),
+    )
     |> request.set_header("anthropic-version", client.api_version)
     |> request.set_header("accept", "text/event-stream")
     |> request.set_body(body)

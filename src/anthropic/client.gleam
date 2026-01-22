@@ -3,7 +3,7 @@
 //// This module provides a client for making requests to the Anthropic Messages API,
 //// handling headers, timeouts, and response parsing.
 
-import anthropic/config.{type Config}
+import anthropic/config.{type Config, api_key_to_string}
 import anthropic/types/error.{
   type AnthropicError, type ApiErrorType, AuthenticationError, InternalApiError,
   InvalidRequestError, NotFoundError, OverloadedError, PermissionError,
@@ -73,7 +73,7 @@ pub fn post_json(
     req
     |> request.set_method(http.Post)
     |> request.set_header("content-type", "application/json")
-    |> request.set_header("x-api-key", client.config.api_key)
+    |> request.set_header("x-api-key", api_key_to_string(client.config.api_key))
     |> request.set_header("anthropic-version", api_version)
     |> request.set_body(body)
 
