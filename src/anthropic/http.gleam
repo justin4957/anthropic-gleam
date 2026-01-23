@@ -33,7 +33,7 @@
 
 import anthropic/types/decoder
 import anthropic/types/error.{
-  type AnthropicError, type ApiErrorType, AuthenticationError, InternalApiError,
+  type AnthropicError, AuthenticationError, InternalApiError,
   InvalidRequestError, NotFoundError, OverloadedError, PermissionError,
   RateLimitError,
 }
@@ -41,9 +41,7 @@ import anthropic/types/request.{
   type CreateMessageRequest, type CreateMessageResponse,
 }
 import anthropic/validation
-import gleam/dynamic/decode
 import gleam/list
-import gleam/option.{type Option, None, Some}
 import gleam/string
 
 // =============================================================================
@@ -218,23 +216,28 @@ pub fn check_status(response: HttpResponse) -> Result(String, AnthropicError) {
     200 -> Ok(response.body)
 
     // Client errors
-    400 -> Error(parse_api_error(status, response.body, InvalidRequestError))
-    401 -> Error(parse_api_error(status, response.body, AuthenticationError))
-    403 -> Error(parse_api_error(status, response.body, PermissionError))
-    404 -> Error(parse_api_error(status, response.body, NotFoundError))
-    429 -> Error(parse_api_error(status, response.body, RateLimitError))
+    400 ->
+      Error(decoder.parse_api_error(status, response.body, InvalidRequestError))
+    401 ->
+      Error(decoder.parse_api_error(status, response.body, AuthenticationError))
+    403 ->
+      Error(decoder.parse_api_error(status, response.body, PermissionError))
+    404 -> Error(decoder.parse_api_error(status, response.body, NotFoundError))
+    429 -> Error(decoder.parse_api_error(status, response.body, RateLimitError))
 
     // Server errors
-    500 -> Error(parse_api_error(status, response.body, InternalApiError))
-    529 -> Error(parse_api_error(status, response.body, OverloadedError))
+    500 ->
+      Error(decoder.parse_api_error(status, response.body, InternalApiError))
+    529 ->
+      Error(decoder.parse_api_error(status, response.body, OverloadedError))
 
     // Other 4xx errors
     _ if status >= 400 && status < 500 ->
-      Error(parse_api_error(status, response.body, InvalidRequestError))
+      Error(decoder.parse_api_error(status, response.body, InvalidRequestError))
 
     // Other 5xx errors
     _ if status >= 500 ->
-      Error(parse_api_error(status, response.body, InternalApiError))
+      Error(decoder.parse_api_error(status, response.body, InternalApiError))
 
     // Unexpected status codes
     _ ->
@@ -249,70 +252,6 @@ pub fn parse_response_body(
   body: String,
 ) -> Result(CreateMessageResponse, AnthropicError) {
   decoder.parse_response_body(body)
-}
-
-// =============================================================================
-// Error Response Parsing
-// =============================================================================
-
-/// Parse an error response body into ApiError
-fn parse_api_error(
-  status_code: Int,
-  body: String,
-  default_type: ApiErrorType,
-) -> AnthropicError {
-  case parse_error_body(body) {
-    Ok(#(error_type, message, param, code)) ->
-      error.api_error(
-        status_code,
-        error.api_error_details_full(error_type, message, param, code),
-      )
-    Error(_) ->
-      error.api_error(status_code, error.api_error_details(default_type, body))
-  }
-}
-
-/// Error details decoder
-fn error_details_decoder() -> decode.Decoder(
-  #(ApiErrorType, String, Option(String), Option(String)),
-) {
-  use error_type_str <- decode.field("type", decode.string)
-  use message <- decode.field("message", decode.string)
-  use param <- decode.optional_field(
-    "param",
-    None,
-    decode.string |> decode.map(Some),
-  )
-  use code <- decode.optional_field(
-    "code",
-    None,
-    decode.string |> decode.map(Some),
-  )
-
-  let error_type = error.api_error_type_from_string(error_type_str)
-  decode.success(#(error_type, message, param, code))
-}
-
-/// Error wrapper decoder
-fn error_wrapper_decoder() -> decode.Decoder(
-  #(ApiErrorType, String, Option(String), Option(String)),
-) {
-  use details <- decode.field("error", error_details_decoder())
-  decode.success(details)
-}
-
-/// Parse error body JSON
-fn parse_error_body(
-  body: String,
-) -> Result(#(ApiErrorType, String, Option(String), Option(String)), Nil) {
-  case decoder.parse_json(body) {
-    Ok(dyn) ->
-      case decode.run(dyn, error_wrapper_decoder()) {
-        Ok(details) -> Ok(details)
-        Error(_) -> Error(Nil)
-      }
-    Error(_) -> Error(Nil)
-  }
 }
 
 // =============================================================================

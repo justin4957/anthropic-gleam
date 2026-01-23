@@ -9,7 +9,7 @@
 //// This module is primarily for internal use. Most users should use the
 //// higher-level functions in `anthropic/api` or `anthropic/http` instead.
 
-import anthropic/types/error.{type AnthropicError}
+import anthropic/types/error.{type AnthropicError, type ApiErrorType}
 import anthropic/types/message.{
   type ContentBlock, type Role, Assistant, TextBlock, ToolUseBlock, User,
 }
@@ -193,3 +193,83 @@ fn json_encode(value: Dynamic) -> Dynamic
 /// Convert iodata to binary string
 @external(erlang, "erlang", "iolist_to_binary")
 fn iolist_to_binary(data: Dynamic) -> String
+
+// =============================================================================
+// Error Response Parsing
+// =============================================================================
+
+/// Parse an API error response body into an AnthropicError
+///
+/// This function attempts to parse the Anthropic API error format:
+/// ```json
+/// {
+///   "type": "error",
+///   "error": {
+///     "type": "invalid_request_error",
+///     "message": "..."
+///   }
+/// }
+/// ```
+///
+/// If parsing fails, it falls back to creating an error with the default type
+/// and the raw body as the message.
+pub fn parse_api_error(
+  status_code: Int,
+  body: String,
+  default_type: ApiErrorType,
+) -> AnthropicError {
+  case parse_error_body(body) {
+    Ok(#(error_type, message, param, code)) ->
+      error.api_error(
+        status_code,
+        error.api_error_details_full(error_type, message, param, code),
+      )
+    Error(_) ->
+      error.api_error(status_code, error.api_error_details(default_type, body))
+  }
+}
+
+/// Parse error body JSON into error details tuple
+///
+/// Returns a tuple of (ApiErrorType, message, optional param, optional code)
+pub fn parse_error_body(
+  body: String,
+) -> Result(#(ApiErrorType, String, Option(String), Option(String)), Nil) {
+  case parse_json(body) {
+    Ok(dyn) ->
+      case decode.run(dyn, error_wrapper_decoder()) {
+        Ok(details) -> Ok(details)
+        Error(_) -> Error(Nil)
+      }
+    Error(_) -> Error(Nil)
+  }
+}
+
+/// Decoder for the error wrapper object
+fn error_wrapper_decoder() -> decode.Decoder(
+  #(ApiErrorType, String, Option(String), Option(String)),
+) {
+  use details <- decode.field("error", error_details_decoder())
+  decode.success(details)
+}
+
+/// Decoder for the inner error details
+fn error_details_decoder() -> decode.Decoder(
+  #(ApiErrorType, String, Option(String), Option(String)),
+) {
+  use error_type_str <- decode.field("type", decode.string)
+  use message <- decode.field("message", decode.string)
+  use param <- decode.optional_field(
+    "param",
+    None,
+    decode.string |> decode.map(Some),
+  )
+  use code <- decode.optional_field(
+    "code",
+    None,
+    decode.string |> decode.map(Some),
+  )
+
+  let error_type = error.api_error_type_from_string(error_type_str)
+  decode.success(#(error_type, message, param, code))
+}
