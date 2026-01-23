@@ -28,6 +28,8 @@ import anthropic/types/error.{type AnthropicError}
 import anthropic/types/request.{
   type CreateMessageRequest, type CreateMessageResponse,
 }
+import gleam/int
+import gleam/list
 import gleam/option.{type Option, None, Some}
 
 // =============================================================================
@@ -186,29 +188,18 @@ pub fn summarize_response(response: CreateMessageResponse) -> ResponseSummary {
 
 // Helper functions for counting
 fn count_messages(messages: List(a)) -> Int {
-  list_length(messages)
+  list.length(messages)
 }
 
 fn count_tools(tools: Option(List(a))) -> Int {
   case tools {
-    Some(t) -> list_length(t)
+    Some(t) -> list.length(t)
     None -> 0
   }
 }
 
 fn count_content_blocks(blocks: List(a)) -> Int {
-  list_length(blocks)
-}
-
-fn list_length(list: List(a)) -> Int {
-  do_list_length(list, 0)
-}
-
-fn do_list_length(list: List(a), acc: Int) -> Int {
-  case list {
-    [] -> acc
-    [_, ..rest] -> do_list_length(rest, acc + 1)
-  }
+  list.length(blocks)
 }
 
 // =============================================================================
@@ -328,7 +319,7 @@ pub fn simple_logging_hooks() -> Hooks {
         <> " model="
         <> event.request.model
         <> " messages="
-        <> int_to_string(event.request.message_count)
+        <> int.to_string(event.request.message_count)
         <> " request_id="
         <> event.request_id,
     )
@@ -341,7 +332,7 @@ pub fn simple_logging_hooks() -> Hooks {
           "endpoint="
             <> event.endpoint
             <> " duration_ms="
-            <> int_to_string(event.duration_ms)
+            <> int.to_string(event.duration_ms)
             <> " success=true request_id="
             <> event.request_id,
         )
@@ -351,7 +342,7 @@ pub fn simple_logging_hooks() -> Hooks {
           "endpoint="
             <> event.endpoint
             <> " duration_ms="
-            <> int_to_string(event.duration_ms)
+            <> int.to_string(event.duration_ms)
             <> " success=false request_id="
             <> event.request_id,
         )
@@ -363,11 +354,11 @@ pub fn simple_logging_hooks() -> Hooks {
       "endpoint="
         <> event.endpoint
         <> " attempt="
-        <> int_to_string(event.attempt)
+        <> int.to_string(event.attempt)
         <> "/"
-        <> int_to_string(event.max_attempts)
+        <> int.to_string(event.max_attempts)
         <> " delay_ms="
-        <> int_to_string(event.delay_ms)
+        <> int.to_string(event.delay_ms)
         <> " request_id="
         <> event.request_id,
     )
@@ -404,7 +395,7 @@ pub fn generate_request_id() -> String {
   // Simple implementation using timestamp and random
   let timestamp = get_timestamp_ms()
   let random = random_int(0, 999_999)
-  "req_" <> int_to_string(timestamp) <> "_" <> int_to_string(random)
+  "req_" <> int.to_string(timestamp) <> "_" <> int.to_string(random)
 }
 
 /// Get current timestamp in milliseconds
@@ -423,14 +414,6 @@ fn random_uniform(max: Int) -> Int
 fn random_int(min: Int, max: Int) -> Int {
   min + random_uniform(max - min)
 }
-
-/// Simple int to string conversion
-fn int_to_string(n: Int) -> String {
-  do_int_to_string(n)
-}
-
-@external(erlang, "erlang", "integer_to_binary")
-fn do_int_to_string(n: Int) -> String
 
 /// Simple logging function
 fn log_message(level: String, message: String) -> Nil {

@@ -150,8 +150,13 @@ pub fn with_backoff_multiplier(
 pub fn calculate_delay(config: RetryConfig, attempt: Int) -> Int {
   // Exponential backoff: base_delay * (multiplier ^ attempt)
   let base = int.to_float(config.base_delay_ms)
-  let exponential =
-    base *. pow(config.backoff_multiplier, int.to_float(attempt))
+  let power_result =
+    float.power(config.backoff_multiplier, int.to_float(attempt))
+  let exponential = case power_result {
+    Ok(value) -> base *. value
+    // Fallback to base delay if power calculation fails
+    Error(_) -> base
+  }
 
   // Apply max delay cap
   let capped = float.min(exponential, int.to_float(config.max_delay_ms))
@@ -304,18 +309,3 @@ fn sleep_ms(ms: Int) -> Nil
 /// Generate a random float between 0.0 and 1.0
 @external(erlang, "rand", "uniform")
 fn random_float() -> Float
-
-/// Simple power function for exponential backoff
-fn pow(base: Float, exponent: Float) -> Float {
-  case exponent <=. 0.0 {
-    True -> 1.0
-    False -> pow_loop(base, float.truncate(exponent), 1.0)
-  }
-}
-
-fn pow_loop(base: Float, n: Int, acc: Float) -> Float {
-  case n <= 0 {
-    True -> acc
-    False -> pow_loop(base, n - 1, acc *. base)
-  }
-}
