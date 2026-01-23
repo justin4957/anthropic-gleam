@@ -136,75 +136,16 @@ fn is_valid_tool_name_string(name: String) -> Bool {
 
 /// Check if a character is alphanumeric (a-z, A-Z, 0-9)
 fn is_alphanumeric(char: String) -> Bool {
-  let lower =
-    char == "a"
-    || char == "b"
-    || char == "c"
-    || char == "d"
-    || char == "e"
-    || char == "f"
-    || char == "g"
-    || char == "h"
-    || char == "i"
-    || char == "j"
-    || char == "k"
-    || char == "l"
-    || char == "m"
-    || char == "n"
-    || char == "o"
-    || char == "p"
-    || char == "q"
-    || char == "r"
-    || char == "s"
-    || char == "t"
-    || char == "u"
-    || char == "v"
-    || char == "w"
-    || char == "x"
-    || char == "y"
-    || char == "z"
-
-  let upper =
-    char == "A"
-    || char == "B"
-    || char == "C"
-    || char == "D"
-    || char == "E"
-    || char == "F"
-    || char == "G"
-    || char == "H"
-    || char == "I"
-    || char == "J"
-    || char == "K"
-    || char == "L"
-    || char == "M"
-    || char == "N"
-    || char == "O"
-    || char == "P"
-    || char == "Q"
-    || char == "R"
-    || char == "S"
-    || char == "T"
-    || char == "U"
-    || char == "V"
-    || char == "W"
-    || char == "X"
-    || char == "Y"
-    || char == "Z"
-
-  let digit =
-    char == "0"
-    || char == "1"
-    || char == "2"
-    || char == "3"
-    || char == "4"
-    || char == "5"
-    || char == "6"
-    || char == "7"
-    || char == "8"
-    || char == "9"
-
-  lower || upper || digit
+  case string.to_utf_codepoints(char) {
+    [codepoint] -> {
+      let code = string.utf_codepoint_to_int(codepoint)
+      // a-z: 97-122, A-Z: 65-90, 0-9: 48-57
+      { code >= 97 && code <= 122 }
+      || { code >= 65 && code <= 90 }
+      || { code >= 48 && code <= 57 }
+    }
+    _ -> False
+  }
 }
 
 // =============================================================================
