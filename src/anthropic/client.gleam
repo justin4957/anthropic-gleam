@@ -2,6 +2,41 @@
 ////
 //// This module provides a client for making requests to the Anthropic Messages API,
 //// handling headers, timeouts, and response parsing.
+////
+//// ## Quick Start
+////
+//// For most use cases, use the simple `init` functions:
+////
+//// ```gleam
+//// import anthropic/client
+//// import anthropic/api
+////
+//// // Read API key from ANTHROPIC_API_KEY environment variable
+//// let assert Ok(client) = client.init()
+////
+//// // Or provide the key explicitly
+//// let assert Ok(client) = client.init_with_key("sk-ant-...")
+////
+//// // Then make API calls
+//// api.create_message(client, request)
+//// ```
+////
+//// ## Advanced Configuration
+////
+//// For custom base URLs, timeouts, or retry settings, use the config builders:
+////
+//// ```gleam
+//// import anthropic/config
+//// import anthropic/client
+////
+//// let assert Ok(cfg) = config.config_options()
+////   |> config.with_api_key("sk-ant-...")
+////   |> config.with_base_url("https://custom-endpoint.example.com")
+////   |> config.with_timeout_ms(120_000)
+////   |> config.load_config()
+////
+//// let client = client.new(cfg)
+//// ```
 
 import anthropic/config.{type Config, api_key_to_string}
 import anthropic/types/decoder
@@ -40,8 +75,47 @@ pub type Client {
 }
 
 /// Create a new client from configuration
+///
+/// For advanced use cases where you need custom configuration.
+/// For simple use cases, prefer `init()` or `init_with_key()`.
 pub fn new(config: Config) -> Client {
   Client(config: config)
+}
+
+/// Initialize a client using the ANTHROPIC_API_KEY environment variable
+///
+/// This is the simplest way to create a client when you have your API key
+/// set in the environment.
+///
+/// ## Example
+///
+/// ```gleam
+/// // Ensure ANTHROPIC_API_KEY is set in your environment
+/// let assert Ok(client) = client.init()
+/// api.create_message(client, request)
+/// ```
+pub fn init() -> Result(Client, error.AnthropicError) {
+  config.config_options()
+  |> config.load_config()
+  |> result.map(new)
+}
+
+/// Initialize a client with an explicit API key
+///
+/// Use this when you want to provide the API key directly rather than
+/// reading from environment variables.
+///
+/// ## Example
+///
+/// ```gleam
+/// let assert Ok(client) = client.init_with_key("sk-ant-api03-...")
+/// api.create_message(client, request)
+/// ```
+pub fn init_with_key(api_key: String) -> Result(Client, error.AnthropicError) {
+  config.config_options()
+  |> config.with_api_key(api_key)
+  |> config.load_config()
+  |> result.map(new)
 }
 
 // =============================================================================
