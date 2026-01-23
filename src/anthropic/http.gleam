@@ -40,10 +40,10 @@ import anthropic/types/error.{
 import anthropic/types/request.{
   type CreateMessageRequest, type CreateMessageResponse,
 }
+import anthropic/validation
 import gleam/dynamic/decode
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/result
 import gleam/string
 
 // =============================================================================
@@ -322,24 +322,9 @@ fn parse_error_body(
 /// Validate a CreateMessageRequest before sending
 ///
 /// This performs client-side validation to catch errors early.
+/// Delegates to the shared validation module for consistent validation rules.
 pub fn validate_request(
   req: CreateMessageRequest,
 ) -> Result(Nil, AnthropicError) {
-  case list.is_empty(req.messages) {
-    True -> Error(error.invalid_request_error("messages list cannot be empty"))
-    False -> Ok(Nil)
-  }
-  |> result.try(fn(_) {
-    case string.is_empty(string.trim(req.model)) {
-      True -> Error(error.invalid_request_error("model name cannot be empty"))
-      False -> Ok(Nil)
-    }
-  })
-  |> result.try(fn(_) {
-    case req.max_tokens > 0 {
-      True -> Ok(Nil)
-      False ->
-        Error(error.invalid_request_error("max_tokens must be greater than 0"))
-    }
-  })
+  validation.validate_request_or_error(req)
 }
