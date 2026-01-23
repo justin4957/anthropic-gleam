@@ -21,7 +21,9 @@ import anthropic/types/streaming.{
 }
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
+import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/string
 
 // =============================================================================
 // Error Types
@@ -339,9 +341,6 @@ fn format_errors(errors: List(decode.DecodeError)) -> String {
   |> list.map(fn(e) { "expected " <> e.expected <> ", got " <> e.found })
   |> string.join("; ")
 }
-
-import gleam/list
-import gleam/string
 
 /// Parse JSON string to Dynamic
 @external(erlang, "gleam_json_ffi", "decode")
