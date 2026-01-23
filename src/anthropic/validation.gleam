@@ -306,12 +306,16 @@ fn is_valid_model_name(name: String) -> Bool {
 }
 
 fn is_alphanumeric(char: String) -> Bool {
-  let lower = "abcdefghijklmnopqrstuvwxyz"
-  let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-  let digits = "0123456789"
-  string.contains(lower, char)
-  || string.contains(upper, char)
-  || string.contains(digits, char)
+  case string.to_utf_codepoints(char) {
+    [codepoint] -> {
+      let code = string.utf_codepoint_to_int(codepoint)
+      // a-z: 97-122, A-Z: 65-90, 0-9: 48-57
+      { code >= 97 && code <= 122 }
+      || { code >= 65 && code <= 90 }
+      || { code >= 48 && code <= 57 }
+    }
+    _ -> False
+  }
 }
 
 /// Validate max_tokens
