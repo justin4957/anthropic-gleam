@@ -1244,7 +1244,9 @@ pub fn load_config_missing_api_key_error_test() {
 // Client Tests
 // =============================================================================
 
-import anthropic/client.{api_version, handle_response, messages_endpoint, new}
+import anthropic/client.{
+  api_version, handle_response, init, init_with_key, messages_endpoint, new,
+}
 import gleam/http/response
 
 pub fn client_new_test() {
@@ -1260,6 +1262,54 @@ pub fn client_api_version_test() {
 
 pub fn client_messages_endpoint_test() {
   assert messages_endpoint == "/v1/messages"
+}
+
+pub fn client_init_with_env_test() {
+  // Set environment variable
+  set_env("ANTHROPIC_API_KEY", "test-init-key")
+
+  // init() should read from environment
+  let assert Ok(client) = init()
+  assert api_key_to_string(client.config.api_key) == "test-init-key"
+}
+
+pub fn client_init_without_env_test() {
+  // Clear environment variable
+  set_env("ANTHROPIC_API_KEY", "")
+
+  // init() should fail without environment variable
+  let result = init()
+  assert result
+    == Error(ConfigError(
+      reason: "API key is required. Provide ConfigOptions.api_key or set ANTHROPIC_API_KEY.",
+    ))
+}
+
+pub fn client_init_with_key_test() {
+  // Clear environment variable to ensure we're using the explicit key
+  set_env("ANTHROPIC_API_KEY", "")
+
+  // init_with_key() should use the provided key
+  let assert Ok(client) = init_with_key("explicit-api-key")
+  assert api_key_to_string(client.config.api_key) == "explicit-api-key"
+}
+
+pub fn client_init_with_key_empty_test() {
+  // init_with_key() with empty string should fail
+  let result = init_with_key("")
+  assert result
+    == Error(ConfigError(
+      reason: "API key is required. Provide ConfigOptions.api_key or set ANTHROPIC_API_KEY.",
+    ))
+}
+
+pub fn client_init_with_key_overrides_env_test() {
+  // Set environment variable
+  set_env("ANTHROPIC_API_KEY", "env-key")
+
+  // init_with_key() should override environment variable
+  let assert Ok(client) = init_with_key("explicit-key")
+  assert api_key_to_string(client.config.api_key) == "explicit-key"
 }
 
 pub fn handle_response_success_test() {
