@@ -42,8 +42,8 @@ import anthropic/types/message.{
 import anthropic/types/request.{
   EndTurn, MaxTokens, Metadata, StopSequence, ToolUse, Usage, create_request,
   create_response, create_response_with_stop_sequence, metadata_to_json,
-  request_to_json, request_to_json_string, response_get_tool_uses,
-  response_has_tool_use, response_text, response_to_json,
+  new as request_new, request_to_json, request_to_json_string,
+  response_get_tool_uses, response_has_tool_use, response_text, response_to_json,
   response_to_json_string, stop_reason_from_string, stop_reason_to_json,
   stop_reason_to_string, usage_to_json, with_metadata, with_stop_sequences,
   with_stream, with_system, with_temperature, with_tool_choice, with_tools,
@@ -4787,4 +4787,58 @@ pub fn api_chat_alias_test() {
 
   // Both should return the same validation error
   assert chat_result == create_result
+}
+
+// =============================================================================
+// request.new Tests (Issue #22 - Rename API)
+// =============================================================================
+
+pub fn request_new_basic_test() {
+  // Test that request.new creates a valid request
+  let req =
+    request_new("claude-sonnet-4-20250514", [user_message("Hello!")], 1024)
+  assert req.model == "claude-sonnet-4-20250514"
+  assert req.max_tokens == 1024
+  assert list.length(req.messages) == 1
+}
+
+pub fn request_new_equivalent_to_create_request_test() {
+  // Test that request.new and create_request produce identical results
+  let new_req =
+    request_new("claude-sonnet-4-20250514", [user_message("Test")], 512)
+  let old_req =
+    create_request("claude-sonnet-4-20250514", [user_message("Test")], 512)
+  assert new_req == old_req
+}
+
+pub fn request_new_with_builders_test() {
+  // Test that request.new works with all builder functions
+  let req =
+    request_new("claude-sonnet-4-20250514", [user_message("Hello")], 1024)
+    |> with_system("You are helpful")
+    |> with_temperature(0.7)
+    |> with_top_p(0.9)
+    |> with_top_k(40)
+
+  assert req.model == "claude-sonnet-4-20250514"
+  assert req.system == Some("You are helpful")
+  assert req.temperature == Some(0.7)
+  assert req.top_p == Some(0.9)
+  assert req.top_k == Some(40)
+}
+
+pub fn api_chat_with_request_new_test() {
+  // Test that api.chat works with request.new
+  set_env("ANTHROPIC_API_KEY", "test-api-key")
+  let assert Ok(client) = init()
+
+  // Create request using new() instead of create_request()
+  let req = request_new("claude-sonnet-4-20250514", [], 1024)
+
+  // chat should fail validation (empty messages)
+  let chat_result = chat(client, req)
+  case chat_result {
+    Error(_) -> Nil
+    Ok(_) -> panic as "Expected validation error"
+  }
 }

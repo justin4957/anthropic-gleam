@@ -12,11 +12,12 @@
 //// ```gleam
 //// import anthropic/http
 //// import anthropic/types/request
+//// import anthropic/types/message.{user_message}
 ////
 //// // Build the request
-//// let api_request = request.create_request(
+//// let api_request = request.new(
 ////   "claude-sonnet-4-20250514",
-////   [request.user_message("Hello!")],
+////   [user_message("Hello!")],
 ////   1024,
 //// )
 //// let http_request = http.build_messages_request(config, api_request)
@@ -112,8 +113,8 @@ pub type HttpResponse {
 /// ## Example
 ///
 /// ```gleam
-/// let request = create_request("claude-sonnet-4-20250514", messages, 1024)
-/// let http_req = build_messages_request("sk-ant-...", default_base_url, request)
+/// let req = request.new("claude-sonnet-4-20250514", messages, 1024)
+/// let http_req = build_messages_request("sk-ant-...", default_base_url, req)
 /// // Send http_req with your HTTP client
 /// ```
 pub fn build_messages_request(

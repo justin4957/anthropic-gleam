@@ -133,8 +133,23 @@ pub type CreateMessageRequest {
   )
 }
 
-/// Create a basic request with required fields only
-pub fn create_request(
+/// Create a new message request with required fields only
+///
+/// This is the idiomatic Gleam constructor for CreateMessageRequest.
+///
+/// ## Example
+///
+/// ```gleam
+/// import anthropic/types/request
+/// import anthropic/types/message.{user_message}
+///
+/// let req = request.new(
+///   "claude-sonnet-4-20250514",
+///   [user_message("Hello, Claude!")],
+///   1024,
+/// )
+/// ```
+pub fn new(
   model: String,
   messages: List(Message),
   max_tokens: Int,
@@ -153,6 +168,18 @@ pub fn create_request(
     tools: None,
     tool_choice: None,
   )
+}
+
+/// Create a basic request with required fields only
+///
+/// @deprecated Use `request.new` instead for idiomatic Gleam style
+@deprecated("Use request.new instead")
+pub fn create_request(
+  model: String,
+  messages: List(Message),
+  max_tokens: Int,
+) -> CreateMessageRequest {
+  new(model, messages, max_tokens)
 }
 
 /// Set the system prompt on a request

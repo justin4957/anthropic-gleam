@@ -10,6 +10,8 @@
 //// ```gleam
 //// import anthropic/client
 //// import anthropic/api
+//// import anthropic/types/request
+//// import anthropic/types/message.{user_message}
 ////
 //// // Read API key from ANTHROPIC_API_KEY environment variable
 //// let assert Ok(client) = client.init()
@@ -17,8 +19,9 @@
 //// // Or provide the key explicitly
 //// let assert Ok(client) = client.init_with_key("sk-ant-...")
 ////
-//// // Then make API calls
-//// api.create_message(client, request)
+//// // Create a request and chat
+//// let req = request.new("claude-sonnet-4-20250514", [user_message("Hello!")], 1024)
+//// api.chat(client, req)
 //// ```
 ////
 //// ## Advanced Configuration
