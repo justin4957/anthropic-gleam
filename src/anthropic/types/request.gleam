@@ -100,6 +100,152 @@ pub fn metadata_to_json(metadata: Metadata) -> Json {
 }
 
 // =============================================================================
+// RequestOptions - For bulk option setting
+// =============================================================================
+
+/// Options for configuring a message request
+///
+/// Use this when you want to specify multiple options at once, or when
+/// copying options between requests. For simple cases, the builder pattern
+/// with `with_*` functions is recommended.
+///
+/// ## Example
+///
+/// ```gleam
+/// // Create reusable options
+/// let opts = request.options()
+///   |> request.opt_system("You are a helpful assistant")
+///   |> request.opt_temperature(0.7)
+///   |> request.opt_max_tokens(2048)
+///
+/// // Use options with new_with
+/// let req = request.new_with("claude-sonnet-4-20250514", messages, opts)
+/// ```
+pub type RequestOptions {
+  RequestOptions(
+    /// Maximum number of tokens to generate (required, defaults to 1024)
+    max_tokens: Int,
+    /// System prompt to set context for the conversation
+    system: Option(String),
+    /// Temperature for sampling (0.0 to 1.0)
+    temperature: Option(Float),
+    /// Top-p sampling parameter
+    top_p: Option(Float),
+    /// Top-k sampling parameter
+    top_k: Option(Int),
+    /// Sequences that will stop generation
+    stop_sequences: Option(List(String)),
+    /// Whether to stream the response
+    stream: Option(Bool),
+    /// Optional metadata including user_id
+    metadata: Option(Metadata),
+    /// List of tools available to the model
+    tools: Option(List(Tool)),
+    /// How the model should choose which tool to use
+    tool_choice: Option(ToolChoice),
+  )
+}
+
+/// Create default request options
+///
+/// Returns options with max_tokens set to 1024 and all other options as None.
+///
+/// ## Example
+///
+/// ```gleam
+/// let opts = request.options()
+///   |> request.opt_temperature(0.8)
+///   |> request.opt_system("Be concise")
+/// ```
+pub fn options() -> RequestOptions {
+  RequestOptions(
+    max_tokens: 1024,
+    system: None,
+    temperature: None,
+    top_p: None,
+    top_k: None,
+    stop_sequences: None,
+    stream: None,
+    metadata: None,
+    tools: None,
+    tool_choice: None,
+  )
+}
+
+/// Set max_tokens in options
+pub fn opt_max_tokens(opts: RequestOptions, max_tokens: Int) -> RequestOptions {
+  RequestOptions(..opts, max_tokens: max_tokens)
+}
+
+/// Set system prompt in options
+pub fn opt_system(opts: RequestOptions, system: String) -> RequestOptions {
+  RequestOptions(..opts, system: Some(system))
+}
+
+/// Set temperature in options
+pub fn opt_temperature(
+  opts: RequestOptions,
+  temperature: Float,
+) -> RequestOptions {
+  RequestOptions(..opts, temperature: Some(temperature))
+}
+
+/// Set top_p in options
+pub fn opt_top_p(opts: RequestOptions, top_p: Float) -> RequestOptions {
+  RequestOptions(..opts, top_p: Some(top_p))
+}
+
+/// Set top_k in options
+pub fn opt_top_k(opts: RequestOptions, top_k: Int) -> RequestOptions {
+  RequestOptions(..opts, top_k: Some(top_k))
+}
+
+/// Set stop sequences in options
+pub fn opt_stop_sequences(
+  opts: RequestOptions,
+  sequences: List(String),
+) -> RequestOptions {
+  RequestOptions(..opts, stop_sequences: Some(sequences))
+}
+
+/// Set stream in options
+pub fn opt_stream(opts: RequestOptions, stream: Bool) -> RequestOptions {
+  RequestOptions(..opts, stream: Some(stream))
+}
+
+/// Set metadata in options
+pub fn opt_metadata(opts: RequestOptions, metadata: Metadata) -> RequestOptions {
+  RequestOptions(..opts, metadata: Some(metadata))
+}
+
+/// Set user_id in options (creates Metadata automatically)
+pub fn opt_user_id(opts: RequestOptions, user_id: String) -> RequestOptions {
+  RequestOptions(..opts, metadata: Some(Metadata(user_id: Some(user_id))))
+}
+
+/// Set tools in options
+pub fn opt_tools(opts: RequestOptions, tools: List(Tool)) -> RequestOptions {
+  RequestOptions(..opts, tools: Some(tools))
+}
+
+/// Set tool choice in options
+pub fn opt_tool_choice(
+  opts: RequestOptions,
+  choice: ToolChoice,
+) -> RequestOptions {
+  RequestOptions(..opts, tool_choice: Some(choice))
+}
+
+/// Set tools and tool choice in options (convenience function)
+pub fn opt_tools_and_choice(
+  opts: RequestOptions,
+  tools: List(Tool),
+  choice: ToolChoice,
+) -> RequestOptions {
+  RequestOptions(..opts, tools: Some(tools), tool_choice: Some(choice))
+}
+
+// =============================================================================
 // CreateMessageRequest
 // =============================================================================
 
@@ -168,6 +314,131 @@ pub fn new(
     tools: None,
     tool_choice: None,
   )
+}
+
+/// Create a new message request with options
+///
+/// This allows specifying multiple options at once using a RequestOptions record.
+/// Useful for config-driven scenarios, copying options between requests, or
+/// when you have many options to set.
+///
+/// ## Example
+///
+/// ```gleam
+/// import anthropic/types/request
+/// import anthropic/types/message.{user_message}
+///
+/// // Create reusable options
+/// let creative_opts = request.options()
+///   |> request.opt_system("You are a creative writer")
+///   |> request.opt_temperature(0.9)
+///   |> request.opt_max_tokens(2048)
+///
+/// // Use options with new_with
+/// let req = request.new_with(
+///   "claude-sonnet-4-20250514",
+///   [user_message("Write a poem about stars")],
+///   creative_opts,
+/// )
+///
+/// // Reuse the same options for another request
+/// let req2 = request.new_with(
+///   "claude-sonnet-4-20250514",
+///   [user_message("Write a poem about the ocean")],
+///   creative_opts,
+/// )
+/// ```
+pub fn new_with(
+  model: String,
+  messages: List(Message),
+  opts: RequestOptions,
+) -> CreateMessageRequest {
+  CreateMessageRequest(
+    model: model,
+    messages: messages,
+    max_tokens: opts.max_tokens,
+    system: opts.system,
+    temperature: opts.temperature,
+    top_p: opts.top_p,
+    top_k: opts.top_k,
+    stop_sequences: opts.stop_sequences,
+    stream: opts.stream,
+    metadata: opts.metadata,
+    tools: opts.tools,
+    tool_choice: opts.tool_choice,
+  )
+}
+
+/// Extract options from an existing request
+///
+/// This allows copying options from one request to use in another.
+///
+/// ## Example
+///
+/// ```gleam
+/// // Extract options from an existing request
+/// let opts = request.get_options(existing_request)
+///
+/// // Modify and use for a new request
+/// let new_opts = opts |> request.opt_temperature(0.5)
+/// let new_req = request.new_with("claude-sonnet-4-20250514", messages, new_opts)
+/// ```
+pub fn get_options(req: CreateMessageRequest) -> RequestOptions {
+  RequestOptions(
+    max_tokens: req.max_tokens,
+    system: req.system,
+    temperature: req.temperature,
+    top_p: req.top_p,
+    top_k: req.top_k,
+    stop_sequences: req.stop_sequences,
+    stream: req.stream,
+    metadata: req.metadata,
+    tools: req.tools,
+    tool_choice: req.tool_choice,
+  )
+}
+
+/// Apply options to an existing request
+///
+/// This merges options into an existing request, overwriting any options
+/// that are set (not None) in the provided RequestOptions.
+///
+/// ## Example
+///
+/// ```gleam
+/// let req = request.new("claude-sonnet-4-20250514", messages, 1024)
+/// let opts = request.options()
+///   |> request.opt_temperature(0.7)
+///   |> request.opt_system("Be helpful")
+///
+/// let updated_req = request.apply_options(req, opts)
+/// ```
+pub fn apply_options(
+  req: CreateMessageRequest,
+  opts: RequestOptions,
+) -> CreateMessageRequest {
+  CreateMessageRequest(
+    model: req.model,
+    messages: req.messages,
+    max_tokens: opts.max_tokens,
+    system: merge_option(req.system, opts.system),
+    temperature: merge_option(req.temperature, opts.temperature),
+    top_p: merge_option(req.top_p, opts.top_p),
+    top_k: merge_option(req.top_k, opts.top_k),
+    stop_sequences: merge_option(req.stop_sequences, opts.stop_sequences),
+    stream: merge_option(req.stream, opts.stream),
+    metadata: merge_option(req.metadata, opts.metadata),
+    tools: merge_option(req.tools, opts.tools),
+    tool_choice: merge_option(req.tool_choice, opts.tool_choice),
+  )
+}
+
+/// Helper to merge options - new value takes precedence if Some
+fn merge_option(existing: Option(a), new: Option(a)) -> Option(a) {
+  case new {
+    Some(_) -> new
+    None -> existing
+  }
 }
 
 /// Create a basic request with required fields only
