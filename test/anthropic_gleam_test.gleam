@@ -40,9 +40,12 @@ import anthropic/types/message.{
   messages_to_json, role_from_string, role_to_json, role_to_string, user_message,
 }
 import anthropic/types/request.{
-  EndTurn, MaxTokens, Metadata, StopSequence, ToolUse, Usage, create_request,
-  create_response, create_response_with_stop_sequence, metadata_to_json,
-  new as request_new, request_to_json, request_to_json_string,
+  EndTurn, MaxTokens, Metadata, StopSequence, ToolUse, Usage, apply_options,
+  create_request, create_response, create_response_with_stop_sequence,
+  get_options, metadata_to_json, new as request_new, new_with, opt_max_tokens,
+  opt_metadata, opt_stop_sequences, opt_stream, opt_system, opt_temperature,
+  opt_tool_choice, opt_tools, opt_tools_and_choice, opt_top_k, opt_top_p,
+  opt_user_id, options, request_to_json, request_to_json_string,
   response_get_tool_uses, response_has_tool_use, response_text, response_to_json,
   response_to_json_string, stop_reason_from_string, stop_reason_to_json,
   stop_reason_to_string, usage_to_json, with_metadata, with_stop_sequences,
@@ -4841,4 +4844,281 @@ pub fn api_chat_with_request_new_test() {
     Error(_) -> Nil
     Ok(_) -> panic as "Expected validation error"
   }
+}
+
+// =============================================================================
+// RequestOptions Tests
+// =============================================================================
+
+pub fn options_creates_default_options_test() {
+  let opts = options()
+  assert opts.max_tokens == 1024
+  assert opts.system == None
+  assert opts.temperature == None
+  assert opts.top_p == None
+  assert opts.top_k == None
+  assert opts.stop_sequences == None
+  assert opts.stream == None
+  assert opts.metadata == None
+  assert opts.tools == None
+  assert opts.tool_choice == None
+}
+
+pub fn opt_max_tokens_test() {
+  let opts = options() |> opt_max_tokens(2048)
+  assert opts.max_tokens == 2048
+}
+
+pub fn opt_system_test() {
+  let opts = options() |> opt_system("You are helpful")
+  assert opts.system == Some("You are helpful")
+}
+
+pub fn opt_temperature_test() {
+  let opts = options() |> opt_temperature(0.7)
+  assert opts.temperature == Some(0.7)
+}
+
+pub fn opt_top_p_test() {
+  let opts = options() |> opt_top_p(0.9)
+  assert opts.top_p == Some(0.9)
+}
+
+pub fn opt_top_k_test() {
+  let opts = options() |> opt_top_k(40)
+  assert opts.top_k == Some(40)
+}
+
+pub fn opt_stop_sequences_test() {
+  let opts = options() |> opt_stop_sequences(["stop", "end"])
+  assert opts.stop_sequences == Some(["stop", "end"])
+}
+
+pub fn opt_stream_test() {
+  let opts = options() |> opt_stream(True)
+  assert opts.stream == Some(True)
+}
+
+pub fn opt_metadata_test() {
+  let metadata = Metadata(user_id: Some("user-123"))
+  let opts = options() |> opt_metadata(metadata)
+  assert opts.metadata == Some(metadata)
+}
+
+pub fn opt_user_id_test() {
+  let opts = options() |> opt_user_id("user-456")
+  assert opts.metadata == Some(Metadata(user_id: Some("user-456")))
+}
+
+pub fn opt_tools_test() {
+  let tool =
+    Tool(
+      name: tool_name_unchecked("calculator"),
+      description: Some("A calculator"),
+      input_schema: empty_input_schema(),
+    )
+  let opts = options() |> opt_tools([tool])
+  assert opts.tools == Some([tool])
+}
+
+pub fn opt_tool_choice_test() {
+  let opts = options() |> opt_tool_choice(Auto)
+  assert opts.tool_choice == Some(Auto)
+}
+
+pub fn opt_tools_and_choice_test() {
+  let tool =
+    Tool(
+      name: tool_name_unchecked("search"),
+      description: Some("A search tool"),
+      input_schema: empty_input_schema(),
+    )
+  let opts = options() |> opt_tools_and_choice([tool], Any)
+  assert opts.tools == Some([tool])
+  assert opts.tool_choice == Some(Any)
+}
+
+pub fn options_chain_multiple_test() {
+  let opts =
+    options()
+    |> opt_system("Be creative")
+    |> opt_temperature(0.9)
+    |> opt_top_p(0.95)
+    |> opt_max_tokens(4096)
+
+  assert opts.system == Some("Be creative")
+  assert opts.temperature == Some(0.9)
+  assert opts.top_p == Some(0.95)
+  assert opts.max_tokens == 4096
+}
+
+pub fn new_with_basic_test() {
+  let opts = options()
+  let req = new_with("claude-sonnet-4-20250514", [user_message("Hello")], opts)
+
+  assert req.model == "claude-sonnet-4-20250514"
+  assert req.max_tokens == 1024
+  assert req.system == None
+}
+
+pub fn new_with_all_options_test() {
+  let opts =
+    options()
+    |> opt_max_tokens(2048)
+    |> opt_system("You are a poet")
+    |> opt_temperature(0.8)
+    |> opt_top_p(0.9)
+    |> opt_top_k(50)
+    |> opt_stop_sequences(["END"])
+
+  let req =
+    new_with("claude-sonnet-4-20250514", [user_message("Write a poem")], opts)
+
+  assert req.model == "claude-sonnet-4-20250514"
+  assert req.max_tokens == 2048
+  assert req.system == Some("You are a poet")
+  assert req.temperature == Some(0.8)
+  assert req.top_p == Some(0.9)
+  assert req.top_k == Some(50)
+  assert req.stop_sequences == Some(["END"])
+}
+
+pub fn new_with_equivalent_to_new_with_builders_test() {
+  // Create request using new() + builders
+  let req1 =
+    request_new("claude-sonnet-4-20250514", [user_message("Test")], 2048)
+    |> with_system("Be helpful")
+    |> with_temperature(0.7)
+
+  // Create request using new_with() + options
+  let opts =
+    options()
+    |> opt_max_tokens(2048)
+    |> opt_system("Be helpful")
+    |> opt_temperature(0.7)
+
+  let req2 = new_with("claude-sonnet-4-20250514", [user_message("Test")], opts)
+
+  // Both should produce equivalent results
+  assert req1.model == req2.model
+  assert req1.max_tokens == req2.max_tokens
+  assert req1.system == req2.system
+  assert req1.temperature == req2.temperature
+}
+
+pub fn get_options_extracts_all_fields_test() {
+  let req =
+    request_new("claude-sonnet-4-20250514", [user_message("Hello")], 2048)
+    |> with_system("Be concise")
+    |> with_temperature(0.5)
+    |> with_top_p(0.9)
+    |> with_top_k(40)
+
+  let opts = get_options(req)
+
+  assert opts.max_tokens == 2048
+  assert opts.system == Some("Be concise")
+  assert opts.temperature == Some(0.5)
+  assert opts.top_p == Some(0.9)
+  assert opts.top_k == Some(40)
+}
+
+pub fn get_options_roundtrip_test() {
+  // Create options and make a request
+  let original_opts =
+    options()
+    |> opt_max_tokens(1500)
+    |> opt_system("Test system")
+    |> opt_temperature(0.6)
+
+  let req =
+    new_with("claude-sonnet-4-20250514", [user_message("Test")], original_opts)
+
+  // Extract options back
+  let extracted_opts = get_options(req)
+
+  // Options should match
+  assert extracted_opts.max_tokens == original_opts.max_tokens
+  assert extracted_opts.system == original_opts.system
+  assert extracted_opts.temperature == original_opts.temperature
+}
+
+pub fn apply_options_basic_test() {
+  let req = request_new("claude-sonnet-4-20250514", [user_message("Hi")], 1024)
+
+  let opts =
+    options()
+    |> opt_temperature(0.8)
+    |> opt_system("Be friendly")
+
+  let updated = apply_options(req, opts)
+
+  assert updated.model == "claude-sonnet-4-20250514"
+  assert updated.temperature == Some(0.8)
+  assert updated.system == Some("Be friendly")
+}
+
+pub fn apply_options_preserves_existing_when_none_test() {
+  // Create request with some options set
+  let req =
+    request_new("claude-sonnet-4-20250514", [user_message("Hi")], 1024)
+    |> with_system("Original system")
+    |> with_temperature(0.5)
+
+  // Apply options that only override temperature
+  let opts = options() |> opt_temperature(0.9)
+
+  let updated = apply_options(req, opts)
+
+  // System should be preserved (opts.system is None)
+  assert updated.system == Some("Original system")
+  // Temperature should be updated
+  assert updated.temperature == Some(0.9)
+}
+
+pub fn apply_options_overrides_when_set_test() {
+  // Create request with system set
+  let req =
+    request_new("claude-sonnet-4-20250514", [user_message("Hi")], 1024)
+    |> with_system("Original system")
+
+  // Apply options that also set system
+  let opts = options() |> opt_system("New system")
+
+  let updated = apply_options(req, opts)
+
+  // System should be overridden
+  assert updated.system == Some("New system")
+}
+
+pub fn options_reusable_across_requests_test() {
+  // Create reusable options
+  let creative_opts =
+    options()
+    |> opt_system("You are a creative writer")
+    |> opt_temperature(0.9)
+    |> opt_max_tokens(2048)
+
+  // Use for multiple requests
+  let req1 =
+    new_with(
+      "claude-sonnet-4-20250514",
+      [user_message("Write about stars")],
+      creative_opts,
+    )
+
+  let req2 =
+    new_with(
+      "claude-sonnet-4-20250514",
+      [user_message("Write about the ocean")],
+      creative_opts,
+    )
+
+  // Both should have the same options
+  assert req1.system == req2.system
+  assert req1.temperature == req2.temperature
+  assert req1.max_tokens == req2.max_tokens
+
+  // But different messages
+  assert req1.messages != req2.messages
 }
