@@ -159,14 +159,14 @@ pub fn tool_use_block_to_json_test() {
 
 pub fn tool_result_block_to_json_test() {
   let block =
-    ToolResultBlock(tool_use_id: "tool_123", content: "72°F", is_error: None)
+    ToolResultBlock(tool_use_id: "tool_123", content: "72°F", is_error: False)
   let result = content_block_to_json(block) |> json.to_string
 
   assert string.contains(result, "\"type\":\"tool_result\"")
   assert string.contains(result, "\"tool_use_id\":\"tool_123\"")
   assert string.contains(result, "\"content\":\"72°F\"")
-  // Should not contain is_error when None
-  assert !string.contains(result, "is_error")
+  // is_error is always included now
+  assert string.contains(result, "\"is_error\":false")
 }
 
 pub fn tool_result_block_with_error_to_json_test() {
@@ -174,7 +174,7 @@ pub fn tool_result_block_with_error_to_json_test() {
     ToolResultBlock(
       tool_use_id: "tool_123",
       content: "Failed to fetch",
-      is_error: Some(True),
+      is_error: True,
     )
   let result = content_block_to_json(block) |> json.to_string
 
@@ -196,7 +196,7 @@ pub fn content_block_type_test() {
   assert content_block_type(ToolResultBlock(
       tool_use_id: "",
       content: "",
-      is_error: None,
+      is_error: False,
     ))
     == "tool_result"
 }
@@ -360,20 +360,16 @@ pub fn tool_use_block_test() {
 
 pub fn tool_result_block_test() {
   let block =
-    ToolResultBlock(tool_use_id: "id1", content: "success", is_error: None)
+    ToolResultBlock(tool_use_id: "id1", content: "success", is_error: False)
   assert block
-    == ToolResultBlock(tool_use_id: "id1", content: "success", is_error: None)
+    == ToolResultBlock(tool_use_id: "id1", content: "success", is_error: False)
 }
 
 pub fn tool_error_block_test() {
   let block =
-    ToolResultBlock(tool_use_id: "id1", content: "failed", is_error: Some(True))
+    ToolResultBlock(tool_use_id: "id1", content: "failed", is_error: True)
   assert block
-    == ToolResultBlock(
-      tool_use_id: "id1",
-      content: "failed",
-      is_error: Some(True),
-    )
+    == ToolResultBlock(tool_use_id: "id1", content: "failed", is_error: True)
 }
 
 pub fn message_constructor_test() {
@@ -2844,7 +2840,7 @@ pub fn tool_result_to_content_block_success_test() {
   let assert ToolResultBlock(tool_use_id, content, is_error) = block
   assert tool_use_id == "id_1"
   assert content == "Sunny, 25C"
-  assert is_error == None
+  assert is_error == False
 }
 
 pub fn tool_result_to_content_block_failure_test() {
@@ -2853,7 +2849,7 @@ pub fn tool_result_to_content_block_failure_test() {
   let assert ToolResultBlock(tool_use_id, content, is_error) = block
   assert tool_use_id == "id_1"
   assert content == "Error occurred"
-  assert is_error == Some(True)
+  assert is_error == True
 }
 
 pub fn create_tool_result_message_test() {
