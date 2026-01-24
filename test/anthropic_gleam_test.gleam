@@ -42,11 +42,12 @@ import anthropic/types/message.{
 import anthropic/types/request.{
   EndTurn, MaxTokens, Metadata, StopSequence, ToolUse, Usage, apply_options,
   create_request, create_response, create_response_with_stop_sequence,
-  get_options, metadata_to_json, new as request_new, new_with, opt_max_tokens,
-  opt_metadata, opt_stop_sequences, opt_stream, opt_system, opt_temperature,
-  opt_tool_choice, opt_tools, opt_tools_and_choice, opt_top_k, opt_top_p,
-  opt_user_id, options, request_to_json, request_to_json_string,
-  response_get_tool_uses, response_has_tool_use, response_text, response_to_json,
+  get_options, get_pending_tool_calls, metadata_to_json, needs_tool_execution,
+  new as request_new, new_with, opt_max_tokens, opt_metadata, opt_stop_sequences,
+  opt_stream, opt_system, opt_temperature, opt_tool_choice, opt_tools,
+  opt_tools_and_choice, opt_top_k, opt_top_p, opt_user_id, options,
+  request_to_json, request_to_json_string, response_get_tool_uses,
+  response_has_tool_use, response_text, response_to_json,
   response_to_json_string, stop_reason_from_string, stop_reason_to_json,
   stop_reason_to_string, usage_to_json, with_metadata, with_stop_sequences,
   with_stream, with_system, with_temperature, with_tool_choice, with_tools,
@@ -710,6 +711,135 @@ pub fn response_get_tool_uses_test() {
 
   let tools = response_get_tool_uses(resp)
   assert list.length(tools) == 2
+}
+
+// =============================================================================
+// Tool Execution Helper Tests (request module)
+// =============================================================================
+
+pub fn request_needs_tool_execution_true_test() {
+  let resp =
+    create_response(
+      "msg_123",
+      [ToolUseBlock(id: "t1", name: "get_weather", input: "{}")],
+      "claude-sonnet-4-20250514",
+      Some(ToolUse),
+      Usage(input_tokens: 10, output_tokens: 20),
+    )
+
+  assert needs_tool_execution(resp) == True
+}
+
+pub fn request_needs_tool_execution_false_end_turn_test() {
+  let resp =
+    create_response(
+      "msg_123",
+      [TextBlock(text: "Hello!")],
+      "claude-sonnet-4-20250514",
+      Some(EndTurn),
+      Usage(input_tokens: 10, output_tokens: 20),
+    )
+
+  assert needs_tool_execution(resp) == False
+}
+
+pub fn request_needs_tool_execution_false_max_tokens_test() {
+  let resp =
+    create_response(
+      "msg_123",
+      [TextBlock(text: "Incomplete...")],
+      "claude-sonnet-4-20250514",
+      Some(MaxTokens),
+      Usage(input_tokens: 10, output_tokens: 1000),
+    )
+
+  assert needs_tool_execution(resp) == False
+}
+
+pub fn request_needs_tool_execution_false_none_test() {
+  let resp =
+    create_response(
+      "msg_123",
+      [TextBlock(text: "Hello!")],
+      "claude-sonnet-4-20250514",
+      None,
+      Usage(input_tokens: 10, output_tokens: 20),
+    )
+
+  assert needs_tool_execution(resp) == False
+}
+
+pub fn get_pending_tool_calls_extracts_calls_test() {
+  let resp =
+    create_response(
+      "msg_123",
+      [
+        TextBlock(text: "Let me check that"),
+        ToolUseBlock(
+          id: "toolu_123",
+          name: "get_weather",
+          input: "{\"location\":\"Paris\"}",
+        ),
+        ToolUseBlock(
+          id: "toolu_456",
+          name: "get_time",
+          input: "{\"timezone\":\"UTC\"}",
+        ),
+      ],
+      "claude-sonnet-4-20250514",
+      Some(ToolUse),
+      Usage(input_tokens: 10, output_tokens: 50),
+    )
+
+  let calls = get_pending_tool_calls(resp)
+  assert list.length(calls) == 2
+
+  let assert Ok(first) = list.first(calls)
+  assert first.id == "toolu_123"
+  assert first.name == "get_weather"
+  assert first.input == "{\"location\":\"Paris\"}"
+
+  let assert Ok(second) = list.last(calls)
+  assert second.id == "toolu_456"
+  assert second.name == "get_time"
+}
+
+pub fn get_pending_tool_calls_empty_when_no_tools_test() {
+  let resp =
+    create_response(
+      "msg_123",
+      [TextBlock(text: "Hello!")],
+      "claude-sonnet-4-20250514",
+      Some(EndTurn),
+      Usage(input_tokens: 10, output_tokens: 20),
+    )
+
+  let calls = get_pending_tool_calls(resp)
+  assert list.length(calls) == 0
+}
+
+pub fn get_pending_tool_calls_returns_tool_call_type_test() {
+  let resp =
+    create_response(
+      "msg_123",
+      [
+        ToolUseBlock(
+          id: "toolu_abc",
+          name: "search",
+          input: "{\"query\":\"test\"}",
+        ),
+      ],
+      "claude-sonnet-4-20250514",
+      Some(ToolUse),
+      Usage(input_tokens: 10, output_tokens: 30),
+    )
+
+  let calls = get_pending_tool_calls(resp)
+  let assert Ok(call) = list.first(calls)
+
+  // Verify it's a proper ToolCall type
+  assert call
+    == ToolCall(id: "toolu_abc", name: "search", input: "{\"query\":\"test\"}")
 }
 
 pub fn response_to_json_test() {
@@ -2730,7 +2860,8 @@ import anthropic/tools.{
   create_tool_result_message, dispatch_tool_call, dispatch_tool_calls,
   execute_tool_calls, extract_tool_calls, failure_for_call, get_first_tool_call,
   get_tool_call_by_id, get_tool_calls_by_name, get_tool_names, has_tool_call,
-  needs_tool_execution, success_for_call, tool_result_to_content_block,
+  needs_tool_execution as tools_needs_tool_execution, success_for_call,
+  tool_result_to_content_block,
 }
 
 fn create_tool_use_response() -> request.CreateMessageResponse {
@@ -2751,12 +2882,12 @@ fn create_tool_use_response() -> request.CreateMessageResponse {
   )
 }
 
-pub fn needs_tool_execution_true_test() {
+pub fn tools_needs_tool_execution_true_test() {
   let response = create_tool_use_response()
-  assert needs_tool_execution(response) == True
+  assert tools_needs_tool_execution(response) == True
 }
 
-pub fn needs_tool_execution_false_test() {
+pub fn tools_needs_tool_execution_false_test() {
   let response =
     create_response(
       "msg_123",
@@ -2765,7 +2896,7 @@ pub fn needs_tool_execution_false_test() {
       Some(EndTurn),
       Usage(input_tokens: 10, output_tokens: 20),
     )
-  assert needs_tool_execution(response) == False
+  assert tools_needs_tool_execution(response) == False
 }
 
 pub fn extract_tool_calls_test() {

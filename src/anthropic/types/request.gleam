@@ -8,7 +8,8 @@ import anthropic/types/message.{
   messages_to_json,
 }
 import anthropic/types/tool.{
-  type Tool, type ToolChoice, tool_choice_to_json, tools_to_json,
+  type Tool, type ToolCall, type ToolChoice, ToolCall, tool_choice_to_json,
+  tools_to_json,
 }
 import gleam/json.{type Json}
 import gleam/list
@@ -761,6 +762,65 @@ pub fn response_get_tool_uses(
     case block {
       ToolUseBlock(_, _, _) -> True
       _ -> False
+    }
+  })
+}
+
+// =============================================================================
+// Tool Execution Helpers
+// =============================================================================
+
+/// Check if response requires tool execution to continue
+///
+/// Returns True if the model stopped because it wants to use a tool.
+/// This is the signal to extract tool calls, execute them, and continue
+/// the conversation with tool results.
+///
+/// ## Example
+///
+/// ```gleam
+/// case request.needs_tool_execution(response) {
+///   True -> {
+///     let calls = request.get_pending_tool_calls(response)
+///     // Execute tools and continue conversation
+///   }
+///   False -> {
+///     // Response is complete, get the text
+///     request.response_text(response)
+///   }
+/// }
+/// ```
+pub fn needs_tool_execution(response: CreateMessageResponse) -> Bool {
+  case response.stop_reason {
+    Some(ToolUse) -> True
+    _ -> False
+  }
+}
+
+/// Extract tool calls that need execution from a response
+///
+/// Returns a list of structured `ToolCall` records ready for execution.
+/// Each `ToolCall` contains the id, name, and input (as JSON string).
+///
+/// ## Example
+///
+/// ```gleam
+/// let calls = request.get_pending_tool_calls(response)
+/// let results = list.map(calls, fn(call) {
+///   case call.name {
+///     "get_weather" -> execute_weather(call)
+///     "search" -> execute_search(call)
+///     _ -> ToolFailure(call.id, "Unknown tool")
+///   }
+/// })
+/// ```
+pub fn get_pending_tool_calls(response: CreateMessageResponse) -> List(ToolCall) {
+  response.content
+  |> list.filter_map(fn(block) {
+    case block {
+      ToolUseBlock(id: id, name: name, input: input) ->
+        Ok(ToolCall(id: id, name: name, input: input))
+      _ -> Error(Nil)
     }
   })
 }
