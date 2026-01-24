@@ -6,7 +6,6 @@
 import gleam/dict.{type Dict}
 import gleam/json.{type Json}
 import gleam/list
-import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 
@@ -119,8 +118,8 @@ pub type ContentBlock {
     tool_use_id: String,
     /// Content of the tool result (can be text or error)
     content: String,
-    /// Whether this result represents an error
-    is_error: Option(Bool),
+    /// Whether this result represents an error (False for success, True for error)
+    is_error: Bool,
   )
 }
 
@@ -148,20 +147,13 @@ pub fn content_block_to_json(block: ContentBlock) -> Json {
       tool_use_id: tool_use_id,
       content: content,
       is_error: is_error,
-    ) -> {
-      let base_fields = [
+    ) ->
+      json.object([
         #("type", json.string("tool_result")),
         #("tool_use_id", json.string(tool_use_id)),
         #("content", json.string(content)),
-      ]
-      let fields = case is_error {
-        Some(True) -> list.append(base_fields, [#("is_error", json.bool(True))])
-        Some(False) ->
-          list.append(base_fields, [#("is_error", json.bool(False))])
-        None -> base_fields
-      }
-      json.object(fields)
-    }
+        #("is_error", json.bool(is_error)),
+      ])
   }
 }
 

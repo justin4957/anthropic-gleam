@@ -134,14 +134,10 @@ pub fn tool_result_to_content_block(result: ToolResult) -> ContentBlock {
       ToolResultBlock(
         tool_use_id: tool_use_id,
         content: content,
-        is_error: None,
+        is_error: False,
       )
     ToolFailure(tool_use_id, error) ->
-      ToolResultBlock(
-        tool_use_id: tool_use_id,
-        content: error,
-        is_error: Some(True),
-      )
+      ToolResultBlock(tool_use_id: tool_use_id, content: error, is_error: True)
   }
 }
 
