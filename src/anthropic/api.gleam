@@ -10,26 +10,27 @@
 //// ```gleam
 //// import anthropic/api
 //// import anthropic/client
-//// import anthropic/types/request.{user_message}
+//// import anthropic/types/request
+//// import anthropic/types/message.{user_message}
 ////
 //// // Initialize client
 //// let assert Ok(client) = client.init()
 ////
 //// // Create a request
-//// let request = request.create_request(
+//// let req = request.new(
 ////   "claude-sonnet-4-20250514",
 ////   [user_message("Hello, Claude!")],
 ////   1024,
 //// )
 ////
 //// // Non-streaming chat
-//// case api.chat(client, request) {
+//// case api.chat(client, req) {
 ////   Ok(response) -> io.println(request.response_text(response))
 ////   Error(err) -> io.println(error.error_to_string(err))
 //// }
 ////
 //// // Streaming chat (batch mode - collects all events)
-//// case api.chat_stream(client, request) {
+//// case api.chat_stream(client, req) {
 ////   Ok(result) -> io.println(api.stream_text(result))
 ////   Error(err) -> io.println(error.error_to_string(err))
 //// }
@@ -60,40 +61,23 @@ import gleam/string
 
 /// Create a message using the Anthropic Messages API
 ///
-/// This function sends a request to Claude and returns the response.
+/// @deprecated Use `api.chat` instead for a more intuitive API
 ///
 /// ## Example
 ///
 /// ```gleam
-/// let request = create_request(
-///   "claude-sonnet-4-20250514",
-///   [user_message("Hello, Claude!")],
-///   1024,
-/// )
-/// case create_message(client, request) {
+/// // Prefer using api.chat instead:
+/// case api.chat(client, request) {
 ///   Ok(response) -> io.println(response_text(response))
 ///   Error(err) -> io.println(error_to_string(err))
 /// }
 /// ```
+@deprecated("Use api.chat instead")
 pub fn create_message(
   client: Client,
-  request: CreateMessageRequest,
+  message_request: CreateMessageRequest,
 ) -> Result(CreateMessageResponse, AnthropicError) {
-  // Validate the request using shared validation module
-  use _ <- result.try(validation.validate_request_or_error(request))
-
-  // Encode request to JSON
-  let body = request.request_to_json_string(request)
-
-  // Make the API call
-  use response_body <- result.try(client.post_and_handle(
-    client,
-    messages_endpoint,
-    body,
-  ))
-
-  // Parse the response
-  parse_response(response_body)
+  chat(client, message_request)
 }
 
 // =============================================================================
@@ -119,16 +103,17 @@ fn parse_response(body: String) -> Result(CreateMessageResponse, AnthropicError)
 /// ```gleam
 /// import anthropic/api
 /// import anthropic/client
-/// import anthropic/types/request.{create_request, user_message}
+/// import anthropic/types/request
+/// import anthropic/types/message.{user_message}
 ///
 /// let assert Ok(client) = client.init()
-/// let request = create_request(
+/// let req = request.new(
 ///   "claude-sonnet-4-20250514",
 ///   [user_message("What is the capital of France?")],
 ///   1024,
 /// )
 ///
-/// case api.chat(client, request) {
+/// case api.chat(client, req) {
 ///   Ok(response) -> io.println(request.response_text(response))
 ///   Error(err) -> handle_error(err)
 /// }
@@ -137,7 +122,21 @@ pub fn chat(
   client: Client,
   message_request: CreateMessageRequest,
 ) -> Result(CreateMessageResponse, AnthropicError) {
-  create_message(client, message_request)
+  // Validate the request using shared validation module
+  use _ <- result.try(validation.validate_request_or_error(message_request))
+
+  // Encode request to JSON
+  let body = request.request_to_json_string(message_request)
+
+  // Make the API call
+  use response_body <- result.try(client.post_and_handle(
+    client,
+    messages_endpoint,
+    body,
+  ))
+
+  // Parse the response
+  parse_response(response_body)
 }
 
 // =============================================================================
@@ -175,16 +174,17 @@ pub type StreamError {
 /// ```gleam
 /// import anthropic/api
 /// import anthropic/client
-/// import anthropic/types/request.{create_request, user_message}
+/// import anthropic/types/request
+/// import anthropic/types/message.{user_message}
 ///
 /// let assert Ok(client) = client.init()
-/// let request = create_request(
+/// let req = request.new(
 ///   "claude-sonnet-4-20250514",
 ///   [user_message("Tell me a story")],
 ///   2048,
 /// )
 ///
-/// case api.chat_stream(client, request) {
+/// case api.chat_stream(client, req) {
 ///   Ok(result) -> io.println(api.stream_text(result))
 ///   Error(err) -> handle_stream_error(err)
 /// }
