@@ -4,6 +4,25 @@
 //// from the Anthropic streaming API. The design follows the sans-io pattern,
 //// allowing you to use any HTTP client that supports streaming.
 ////
+//// ## Recommended: Use `api.chat_stream`
+////
+//// For most use cases, use `api.chat_stream` from the main API module:
+////
+//// ```gleam
+//// import anthropic/api
+//// import anthropic/client
+//// import anthropic/types/request
+//// import anthropic/types/message.{user_message}
+////
+//// let assert Ok(client) = client.init()
+//// let req = request.new("claude-sonnet-4-20250514", [user_message("Hello!")], 1024)
+////
+//// case api.chat_stream(client, req) {
+////   Ok(result) -> io.println(api.stream_text(result))
+////   Error(err) -> handle_error(err)
+//// }
+//// ```
+////
 //// ## True Real-Time Streaming (Sans-IO)
 ////
 //// For true real-time streaming where you process events as they arrive,
@@ -41,17 +60,11 @@
 //// let final_events = finalize_stream(state)
 //// ```
 ////
-//// ## Batch Mode (Convenience, uses gleam_httpc)
+//// ## Batch Mode (Deprecated)
 ////
-//// For simpler use cases where you don't need real-time processing,
-//// use the batch functions that collect all events before returning:
-////
-//// ```gleam
-//// case handler.stream_message(client, request) {
-////   Ok(result) -> handler.get_full_text(result.events)
-////   Error(err) -> handle_error(err)
-//// }
-//// ```
+//// The batch functions `stream_message` and `stream_message_with_callback` in
+//// this module are deprecated. Use `api.chat_stream` and
+//// `api.chat_stream_with_callback` instead for a unified API.
 ////
 //// **Note**: Batch mode waits for the complete response before returning.
 //// Use sans-io incremental parsing for true real-time streaming.
@@ -324,6 +337,8 @@ pub fn parse_sse_chunk(
 
 /// Stream a message request and return all events (batch mode)
 ///
+/// @deprecated Use `api.chat_stream` instead for a unified streaming API
+///
 /// **Note**: This function collects ALL events before returning. It does NOT
 /// provide true real-time streaming. For real-time streaming, use the sans-io
 /// functions (`new_streaming_state`, `process_chunk`) with a streaming HTTP client.
@@ -331,14 +346,13 @@ pub fn parse_sse_chunk(
 /// ## Example
 ///
 /// ```gleam
-/// case stream_message(client, request) {
-///   Ok(result) -> {
-///     // All events are already collected here
-///     get_full_text(result.events)
-///   }
+/// // Prefer using api.chat_stream instead:
+/// case api.chat_stream(client, request) {
+///   Ok(result) -> api.stream_text(result)
 ///   Error(err) -> handle_error(err)
 /// }
 /// ```
+@deprecated("Use api.chat_stream instead")
 pub fn stream_message(
   api_client: Client,
   message_request: api_request.CreateMessageRequest,
@@ -364,6 +378,8 @@ pub fn stream_message(
 
 /// Stream a message request with a callback for each event (batch mode)
 ///
+/// @deprecated Use `api.chat_stream_with_callback` instead for a unified streaming API
+///
 /// **Note**: Despite the callback, this function collects ALL events before
 /// calling the callbacks. It does NOT provide true real-time streaming.
 /// For real-time streaming, use the sans-io functions with a streaming HTTP client.
@@ -371,11 +387,15 @@ pub fn stream_message(
 /// ## Example
 ///
 /// ```gleam
-/// // Callbacks are called AFTER all events are collected
-/// stream_message_with_callback(client, request, fn(event) {
-///   io.println(event_type_string(event))
+/// // Prefer using api.chat_stream_with_callback instead:
+/// api.chat_stream_with_callback(client, request, fn(event) {
+///   case api.event_text(event) {
+///     Ok(text) -> io.print(text)
+///     Error(_) -> Nil
+///   }
 /// })
 /// ```
+@deprecated("Use api.chat_stream_with_callback instead")
 pub fn stream_message_with_callback(
   api_client: Client,
   message_request: api_request.CreateMessageRequest,
