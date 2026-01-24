@@ -3,8 +3,8 @@
 //// This module provides mock responses, test fixtures, and helpers
 //// for testing code that uses the anthropic_gleam library.
 
-import anthropic/types/message
-import anthropic/types/request.{type CreateMessageResponse}
+import anthropic/message
+import anthropic/request.{type CreateMessageResponse}
 import gleam/erlang/charlist
 import gleam/http/response.{type Response}
 import gleam/json

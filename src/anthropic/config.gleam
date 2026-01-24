@@ -3,7 +3,7 @@
 //// This module defines the configuration structure and helpers for loading
 //// settings from explicit options or environment variables.
 
-import anthropic/types/error.{type AnthropicError, config_error}
+import anthropic/error.{type AnthropicError, config_error}
 import gleam/erlang/charlist
 import gleam/option.{type Option, None, Some}
 import gleam/result

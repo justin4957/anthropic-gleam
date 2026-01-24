@@ -5,12 +5,12 @@
 //// content_block_start, content_block_delta, content_block_stop,
 //// message_delta, message_stop, ping, and error events.
 
-import anthropic/streaming/sse.{type SseEvent}
-import anthropic/types/message.{type Role, Assistant, TextBlock, ToolUseBlock}
-import anthropic/types/request.{
+import anthropic/internal/sse.{type SseEvent}
+import anthropic/message.{type Role, Assistant, TextBlock, ToolUseBlock}
+import anthropic/request.{
   type StopReason, EndTurn, MaxTokens, StopSequence, ToolUse,
 }
-import anthropic/types/streaming.{
+import anthropic/streaming.{
   type ContentBlockDelta, type MessageDelta, type MessageDeltaUsage,
   type MessageStart, type StreamError, type StreamEvent, ContentBlockDeltaEvent,
   ContentBlockDeltaEventVariant, ContentBlockStart, ContentBlockStartEvent,

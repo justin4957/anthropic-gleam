@@ -71,12 +71,12 @@
 
 import anthropic/client.{type Client}
 import anthropic/config.{api_key_to_string}
+import anthropic/error.{type AnthropicError}
 import anthropic/http
+import anthropic/internal/sse
+import anthropic/request as api_request
+import anthropic/streaming.{type StreamEvent}
 import anthropic/streaming/decoder
-import anthropic/streaming/sse
-import anthropic/types/error.{type AnthropicError}
-import anthropic/types/request as api_request
-import anthropic/types/streaming.{type StreamEvent}
 import gleam/http as gleam_http
 import gleam/http/request
 import gleam/http/response.{type Response}

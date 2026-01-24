@@ -9,11 +9,11 @@
 //// This module is primarily for internal use. Most users should use the
 //// higher-level functions in `anthropic/api` or `anthropic/http` instead.
 
-import anthropic/types/error.{type AnthropicError, type ApiErrorType}
-import anthropic/types/message.{
+import anthropic/error.{type AnthropicError, type ApiErrorType}
+import anthropic/message.{
   type ContentBlock, type Role, Assistant, TextBlock, ToolUseBlock, User,
 }
-import anthropic/types/request.{
+import anthropic/request.{
   type CreateMessageResponse, type StopReason, type Usage, EndTurn, MaxTokens,
   StopSequence, ToolUse,
 }

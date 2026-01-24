@@ -22,7 +22,7 @@
 //// })
 //// ```
 
-import anthropic/types/error.{type AnthropicError, is_retryable}
+import anthropic/error.{type AnthropicError, is_retryable}
 import gleam/float
 import gleam/int
 import gleam/option.{type Option, None, Some}

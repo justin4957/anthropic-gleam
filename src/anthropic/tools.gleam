@@ -42,12 +42,12 @@
 //// }
 //// ```
 
-import anthropic/types/message.{
+import anthropic/message.{
   type ContentBlock, type Message, Assistant, Message, ToolResultBlock,
   ToolUseBlock, User,
 }
-import anthropic/types/request.{type CreateMessageResponse, ToolUse}
-import anthropic/types/tool.{
+import anthropic/request.{type CreateMessageResponse, ToolUse}
+import anthropic/tool.{
   type ToolCall, type ToolResult, ToolCall, ToolFailure, ToolSuccess,
 }
 import gleam/list

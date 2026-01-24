@@ -32,16 +32,14 @@
 //// }
 //// ```
 
-import anthropic/types/decoder
-import anthropic/types/error.{
+import anthropic/error.{
   type AnthropicError, AuthenticationError, InternalApiError,
   InvalidRequestError, NotFoundError, OverloadedError, PermissionError,
   RateLimitError,
 }
-import anthropic/types/request.{
-  type CreateMessageRequest, type CreateMessageResponse,
-}
-import anthropic/validation
+import anthropic/internal/decoder
+import anthropic/internal/validation
+import anthropic/request.{type CreateMessageRequest, type CreateMessageResponse}
 import gleam/list
 import gleam/string
 

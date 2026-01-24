@@ -28,9 +28,9 @@ gleam add anthropic_gleam@1
 import anthropic/api
 import anthropic/client
 import anthropic/config
-import anthropic/types/error
-import anthropic/types/message
-import anthropic/types/request
+import anthropic/error
+import anthropic/message
+import anthropic/request
 import gleam/io
 
 pub fn main() {
@@ -84,9 +84,9 @@ This library supports a sans-io architecture, allowing you to use any HTTP clien
 
 ```gleam
 import anthropic/http
-import anthropic/types/error
-import anthropic/types/message
-import anthropic/types/request
+import anthropic/error
+import anthropic/message
+import anthropic/request
 import gleam/io
 
 pub fn main() {
@@ -123,8 +123,8 @@ import anthropic/http
 import anthropic/streaming/handler.{
   finalize_stream, get_event_text, new_streaming_state, process_chunk,
 }
-import anthropic/types/message
-import anthropic/types/request
+import anthropic/message
+import anthropic/request
 import gleam/io
 import gleam/list
 
@@ -167,8 +167,8 @@ For simpler use cases where you don't need real-time processing:
 import anthropic/client
 import anthropic/config
 import anthropic/streaming/handler
-import anthropic/types/message
-import anthropic/types/request
+import anthropic/message
+import anthropic/request
 import gleam/io
 
 pub fn batch_stream_example() {
@@ -208,8 +208,8 @@ let weather_tool = tool_builder("get_weather")
 ### Using Tools in Requests
 
 ```gleam
-import anthropic/types/request.{with_tool_choice, with_tools}
-import anthropic/types/tool.{Auto}
+import anthropic/request.{with_tool_choice, with_tools}
+import anthropic/tool.{Auto}
 
 let req = request.create_request(model, messages, max_tokens)
   |> with_tools([weather_tool])
@@ -224,7 +224,7 @@ import anthropic/tools.{
   build_tool_result_messages, dispatch_tool_calls, extract_tool_calls,
   needs_tool_execution,
 }
-import anthropic/types/tool.{ToolSuccess}
+import anthropic/tool.{ToolSuccess}
 
 case api.create_message(api_client, req) {
   Ok(response) -> {
@@ -255,7 +255,7 @@ case api.create_message(api_client, req) {
 
 ```gleam
 import anthropic/api
-import anthropic/types/error.{
+import anthropic/error.{
   error_to_string, is_authentication_error, is_rate_limit_error, is_retryable,
 }
 import gleam/io
@@ -313,7 +313,7 @@ Validate requests before sending:
 
 ```gleam
 import anthropic/api
-import anthropic/types/error
+import anthropic/error
 import anthropic/validation.{is_valid, validate_request}
 import gleam/io
 import gleam/list
@@ -369,19 +369,20 @@ let custom_hooks = default_hooks()
 | `anthropic/client` | HTTP client configuration |
 | `anthropic/config` | Configuration management |
 | `anthropic/http` | Sans-IO HTTP types and request/response builders |
-| `anthropic/types/message` | Message and content block types |
-| `anthropic/types/request` | Request and response types |
-| `anthropic/types/tool` | Tool definition types |
-| `anthropic/types/error` | Error types and helpers |
-| `anthropic/types/streaming` | Streaming event types |
+| `anthropic/message` | Message and content block types |
+| `anthropic/request` | Request and response types |
+| `anthropic/tool` | Tool definition types |
+| `anthropic/error` | Error types and helpers |
+| `anthropic/streaming` | Streaming event types |
 | `anthropic/tools` | Tool use workflow utilities |
 | `anthropic/tools/builder` | Fluent builder for tool definitions |
 | `anthropic/streaming/handler` | Streaming handler (batch and real-time) |
-| `anthropic/streaming/sse` | SSE parser (low-level) |
 | `anthropic/streaming/decoder` | Event decoder (low-level) |
 | `anthropic/streaming/accumulator` | Stream state accumulator |
 | `anthropic/retry` | Retry logic with exponential backoff |
-| `anthropic/validation` | Request validation |
+| `anthropic/internal/validation` | Request validation (internal) |
+| `anthropic/internal/sse` | SSE parser (internal) |
+| `anthropic/internal/decoder` | JSON response decoder (internal) |
 | `anthropic/hooks` | Logging and telemetry hooks |
 | `anthropic/testing` | Mock responses for testing |
 

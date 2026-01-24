@@ -24,10 +24,8 @@
 //// let client = new_client_with_hooks(config, hooks)
 //// ```
 
-import anthropic/types/error.{type AnthropicError}
-import anthropic/types/request.{
-  type CreateMessageRequest, type CreateMessageResponse,
-}
+import anthropic/error.{type AnthropicError}
+import anthropic/request.{type CreateMessageRequest, type CreateMessageResponse}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
