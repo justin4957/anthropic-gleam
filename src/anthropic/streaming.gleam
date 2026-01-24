@@ -4,8 +4,8 @@
 //// including message_start, content_block_start, content_block_delta,
 //// content_block_stop, message_delta, message_stop, ping, and error events.
 
-import anthropic/types/message.{type ContentBlock, type Role}
-import anthropic/types/request.{type StopReason, type Usage}
+import anthropic/message.{type ContentBlock, type Role}
+import anthropic/request.{type StopReason, type Usage}
 import gleam/json.{type Json}
 import gleam/option.{type Option, None, Some}
 

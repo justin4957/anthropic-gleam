@@ -3,23 +3,7 @@ import anthropic/config.{
   default_timeout_ms, load_config, with_api_key, with_base_url,
   with_default_model, with_max_retries, with_timeout_ms,
 }
-import anthropic/hooks.{
-  ContentBlockDelta, ContentBlockStart, ContentBlockStop, MessageDelta,
-  MessageStart, MessageStop, RequestEndEvent, RequestStartEvent, RetryEvent,
-  StreamClosed, StreamError, StreamEvent, StreamOpened, combine_hooks,
-  default_hooks, emit_request_end, emit_request_start, emit_retry,
-  emit_stream_event, generate_request_id, has_hooks, metrics_hooks, no_hooks,
-  simple_logging_hooks, summarize_request, with_on_request_end,
-  with_on_request_start, with_on_retry, with_on_stream_event,
-}
-import anthropic/hooks as hooks_module
-import anthropic/retry.{
-  RetryConfig, aggressive_retry_config, calculate_delay, default_retry_config,
-  no_retry_config, with_backoff_multiplier, with_base_delay_ms,
-  with_jitter_factor, with_max_delay_ms,
-}
-import anthropic/retry as retry_module
-import anthropic/types/error.{
+import anthropic/error.{
   ApiError, AuthenticationError, ConfigError, HttpError, InternalApiError,
   InvalidRequestError, JsonError, NetworkError, NotFoundError, OverloadedError,
   PermissionError, RateLimitError, TimeoutError, UnknownApiError,
@@ -32,14 +16,34 @@ import anthropic/types/error.{
   is_retryable, json_error, missing_api_key_error, network_error,
   overloaded_error, rate_limit_error, timeout_error,
 }
-import anthropic/types/message.{
+import anthropic/hooks.{
+  ContentBlockDelta, ContentBlockStart, ContentBlockStop, MessageDelta,
+  MessageStart, MessageStop, RequestEndEvent, RequestStartEvent, RetryEvent,
+  StreamClosed, StreamError, StreamEvent, StreamOpened, combine_hooks,
+  default_hooks, emit_request_end, emit_request_start, emit_retry,
+  emit_stream_event, generate_request_id, has_hooks, metrics_hooks, no_hooks,
+  simple_logging_hooks, summarize_request, with_on_request_end,
+  with_on_request_start, with_on_retry, with_on_stream_event,
+}
+import anthropic/hooks as hooks_module
+import anthropic/internal/validation.{
+  MaxTokensField, MessagesField, ModelField, StopSequencesField, SystemField,
+  TemperatureField, ToolsField, TopKField, TopPField, errors_to_string,
+  field_to_string, get_model_limits, is_valid, validate_content_blocks,
+  validate_max_tokens, validate_messages, validate_model, validate_or_error,
+  validate_request, validate_stop_sequences, validate_system,
+  validate_temperature, validate_tools, validate_top_k, validate_top_p,
+  validation_error, validation_error_with_value,
+}
+import anthropic/internal/validation as validation_module
+import anthropic/message.{
   Assistant, Base64, ImageBlock, ImageSource, Message, TextBlock,
   ToolResultBlock, ToolUseBlock, User, assistant_message, content_block_to_json,
   content_block_to_json_string, content_block_type, get_tool_uses, has_tool_use,
   image_source_to_json, message_text, message_to_json, message_to_json_string,
   messages_to_json, role_from_string, role_to_json, role_to_string, user_message,
 }
-import anthropic/types/request.{
+import anthropic/request.{
   EndTurn, MaxTokens, Metadata, StopSequence, ToolUse, Usage, apply_options,
   create_request, create_response, create_response_with_stop_sequence,
   get_options, get_pending_tool_calls, metadata_to_json, needs_tool_execution,
@@ -53,7 +57,13 @@ import anthropic/types/request.{
   with_stream, with_system, with_temperature, with_tool_choice, with_tools,
   with_tools_and_choice, with_top_k, with_top_p, with_user_id,
 }
-import anthropic/types/tool.{
+import anthropic/retry.{
+  RetryConfig, aggressive_retry_config, calculate_delay, default_retry_config,
+  no_retry_config, with_backoff_multiplier, with_base_delay_ms,
+  with_jitter_factor, with_max_delay_ms,
+}
+import anthropic/retry as retry_module
+import anthropic/tool.{
   type ToolCall, Any, Auto, EmptyToolName, NoTool, SpecificTool, Tool, ToolCall,
   ToolFailure, ToolSuccess, array_property, empty_input_schema, enum_property,
   input_schema, input_schema_to_json, object_property, property,
@@ -61,16 +71,6 @@ import anthropic/types/tool.{
   tool_name_to_string, tool_name_unchecked, tool_to_json, tool_to_json_string,
   tools_to_json,
 }
-import anthropic/validation.{
-  MaxTokensField, MessagesField, ModelField, StopSequencesField, SystemField,
-  TemperatureField, ToolsField, TopKField, TopPField, errors_to_string,
-  field_to_string, get_model_limits, is_valid, validate_content_blocks,
-  validate_max_tokens, validate_messages, validate_model, validate_or_error,
-  validate_request, validate_stop_sequences, validate_system,
-  validate_temperature, validate_tools, validate_top_k, validate_top_p,
-  validation_error, validation_error_with_value,
-}
-import anthropic/validation as validation_module
 import gleam/erlang/charlist
 import gleam/json
 import gleam/list
@@ -1692,7 +1692,7 @@ pub fn has_api_key_without_key_test() {
 // Streaming Types Tests
 // =============================================================================
 
-import anthropic/types/streaming.{
+import anthropic/streaming.{
   type StreamError as StreamingError, type StreamEvent, ContentBlockDeltaEvent,
   ContentBlockDeltaEventVariant, ContentBlockStartEvent, ContentBlockStopEvent,
   ErrorEvent, InputJsonContentDelta, InputJsonDelta, MessageDeltaEventVariant,
@@ -1875,7 +1875,7 @@ pub fn get_delta_json_from_text_delta_test() {
 // SSE Parser Tests
 // =============================================================================
 
-import anthropic/streaming/sse.{
+import anthropic/internal/sse.{
   EmptyEvent, flush, get_data, get_event_type, is_keepalive, new_parser_state,
   parse_chunk, parse_event, parse_event_lines, parse_line, sse_event,
 }
@@ -3288,7 +3288,7 @@ pub fn tool_builder_validated_empty_name_test() {
 // Opaque Type Tests (Issue #11)
 // =============================================================================
 
-import anthropic/types/tool.{
+import anthropic/tool.{
   InvalidToolNameCharacters, ToolNameTooLong, tool_name,
   tool_name_error_to_string,
 } as tool_module

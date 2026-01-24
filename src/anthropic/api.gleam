@@ -38,15 +38,13 @@
 
 import anthropic/client.{type Client, messages_endpoint}
 import anthropic/config.{api_key_to_string}
+import anthropic/error.{type AnthropicError}
+import anthropic/internal/decoder
+import anthropic/internal/sse
+import anthropic/internal/validation
+import anthropic/request.{type CreateMessageRequest, type CreateMessageResponse}
+import anthropic/streaming.{type StreamEvent}
 import anthropic/streaming/decoder as stream_decoder
-import anthropic/streaming/sse
-import anthropic/types/decoder
-import anthropic/types/error.{type AnthropicError}
-import anthropic/types/request.{
-  type CreateMessageRequest, type CreateMessageResponse,
-}
-import anthropic/types/streaming.{type StreamEvent}
-import anthropic/validation
 import gleam/http as gleam_http
 import gleam/http/request as http_request
 import gleam/http/response.{type Response}

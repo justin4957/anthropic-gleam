@@ -20,7 +20,7 @@
 ////   |> build_simple()
 //// ```
 
-import anthropic/types/tool.{
+import anthropic/tool.{
   type PropertySchema, type Tool, type ToolName, type ToolNameError, InputSchema,
   PropertySchema, Tool, tool_name, tool_name_error_to_string,
   tool_name_unchecked,

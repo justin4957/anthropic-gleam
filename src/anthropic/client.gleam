@@ -42,12 +42,12 @@
 //// ```
 
 import anthropic/config.{type Config, api_key_to_string}
-import anthropic/types/decoder
-import anthropic/types/error.{
+import anthropic/error.{
   type AnthropicError, AuthenticationError, InternalApiError,
   InvalidRequestError, NotFoundError, OverloadedError, PermissionError,
   RateLimitError,
 }
+import anthropic/internal/decoder
 import gleam/http
 import gleam/http/request
 import gleam/http/response.{type Response}

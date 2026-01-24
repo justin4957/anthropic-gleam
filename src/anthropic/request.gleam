@@ -3,11 +3,11 @@
 //// This module defines the types for creating message requests and
 //// parsing message responses from Claude's API.
 
-import anthropic/types/message.{
+import anthropic/message.{
   type ContentBlock, type Message, type Role, Assistant, TextBlock, ToolUseBlock,
   messages_to_json,
 }
-import anthropic/types/tool.{
+import anthropic/tool.{
   type Tool, type ToolCall, type ToolChoice, ToolCall, tool_choice_to_json,
   tools_to_json,
 }

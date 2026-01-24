@@ -4,13 +4,11 @@
 //// a complete message response. It tracks content blocks, handles deltas,
 //// and produces the final message with usage statistics.
 
-import anthropic/types/message.{
-  type ContentBlock, type Role, TextBlock, ToolUseBlock,
-}
-import anthropic/types/request.{
+import anthropic/message.{type ContentBlock, type Role, TextBlock, ToolUseBlock}
+import anthropic/request.{
   type CreateMessageResponse, type StopReason, CreateMessageResponse, Usage,
 }
-import anthropic/types/streaming.{
+import anthropic/streaming.{
   type ContentBlockDelta, type MessageDeltaEvent, type MessageStart,
   type StreamEvent, ContentBlockDeltaEventVariant, ContentBlockStartEvent,
   ContentBlockStopEvent, ErrorEvent, InputJsonContentDelta,

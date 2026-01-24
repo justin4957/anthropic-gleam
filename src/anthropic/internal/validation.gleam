@@ -27,10 +27,10 @@
 //// }
 //// ```
 
-import anthropic/types/error.{type AnthropicError}
-import anthropic/types/message.{type ContentBlock, type Message, TextBlock}
-import anthropic/types/request.{type CreateMessageRequest}
-import anthropic/types/tool.{type Tool}
+import anthropic/error.{type AnthropicError}
+import anthropic/message.{type ContentBlock, type Message, TextBlock}
+import anthropic/request.{type CreateMessageRequest}
+import anthropic/tool.{type Tool}
 import gleam/float
 import gleam/int
 import gleam/list
