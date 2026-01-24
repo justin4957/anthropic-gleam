@@ -1390,7 +1390,15 @@ pub fn handle_response_fallback_error_test() {
 // API Validation Tests
 // =============================================================================
 
-import anthropic/api.{create_message}
+import anthropic/api.{
+  type StreamError as ApiStreamError, type StreamResult as ApiStreamResult,
+  ApiError as StreamApiError, EventDecodeError, HttpError as StreamHttpError,
+  SseParseError, StreamResult as ApiStreamResultConstructor, chat, chat_stream,
+  chat_stream_with_callback, create_message, event_text,
+  stream_complete as api_stream_complete,
+  stream_has_error as api_stream_has_error, stream_message_id, stream_model,
+  stream_text,
+}
 
 pub fn api_validation_empty_messages_test() {
   set_env("ANTHROPIC_API_KEY", "test-key")
@@ -1556,13 +1564,15 @@ pub fn has_api_key_without_key_test() {
 // =============================================================================
 
 import anthropic/types/streaming.{
+  type StreamError as StreamingError, type StreamEvent, ContentBlockDeltaEvent,
   ContentBlockDeltaEventVariant, ContentBlockStartEvent, ContentBlockStopEvent,
   ErrorEvent, InputJsonContentDelta, InputJsonDelta, MessageDeltaEventVariant,
-  MessageStartEvent, MessageStopEvent, PingEvent, TextContentDelta, TextDelta,
-  content_block_stop, event_type_from_string, event_type_string, get_delta_json,
-  get_delta_text, input_json_delta, input_json_delta_event, is_terminal_event,
-  message_delta_event, message_start, stream_error, text_block_start, text_delta,
-  text_delta_event, tool_use_block_start,
+  MessageStart as StreamingMessageStart, MessageStartEvent, MessageStopEvent,
+  PingEvent, StreamError as StreamingErrorConstructor, TextContentDelta,
+  TextDelta, content_block_stop, event_type_from_string, event_type_string,
+  get_delta_json, get_delta_text, input_json_delta, input_json_delta_event,
+  is_terminal_event, message_delta_event, message_start, stream_error,
+  text_block_start, text_delta, text_delta_event, tool_use_block_start,
 }
 
 pub fn text_delta_constructor_test() {
@@ -4609,4 +4619,172 @@ pub fn http_tool_use_response_pattern_test() {
     }
     Error(_) -> panic as "Expected successful parse"
   }
+}
+
+// =============================================================================
+// Unified API Tests
+// =============================================================================
+
+pub fn api_stream_result_type_test() {
+  // Test that StreamResult type works correctly
+  let result = ApiStreamResultConstructor(events: [])
+  assert result.events == []
+}
+
+pub fn api_stream_text_empty_test() {
+  // Test stream_text with no events
+  let result = ApiStreamResultConstructor(events: [])
+  assert stream_text(result) == ""
+}
+
+pub fn api_stream_text_with_text_deltas_test() {
+  // Test stream_text extracts text from ContentBlockDeltaEventVariant events
+  let events = [
+    ContentBlockDeltaEventVariant(content_block_delta: ContentBlockDeltaEvent(
+      index: 0,
+      delta: TextContentDelta(TextDelta(text: "Hello, ")),
+    )),
+    ContentBlockDeltaEventVariant(content_block_delta: ContentBlockDeltaEvent(
+      index: 0,
+      delta: TextContentDelta(TextDelta(text: "world!")),
+    )),
+  ]
+  let result = ApiStreamResultConstructor(events: events)
+  assert stream_text(result) == "Hello, world!"
+}
+
+pub fn api_event_text_with_text_delta_test() {
+  // Test event_text extracts text from a text delta event
+  let event =
+    ContentBlockDeltaEventVariant(content_block_delta: ContentBlockDeltaEvent(
+      index: 0,
+      delta: TextContentDelta(TextDelta(text: "Hello")),
+    ))
+  assert event_text(event) == Ok("Hello")
+}
+
+pub fn api_event_text_with_non_text_event_test() {
+  // Test event_text returns Error for non-text events
+  let event = MessageStopEvent
+  assert event_text(event) == Error(Nil)
+}
+
+pub fn api_stream_complete_with_message_stop_test() {
+  // Test api_stream_complete returns True when MessageStopEvent is present
+  let result = ApiStreamResultConstructor(events: [MessageStopEvent])
+  assert api_stream_complete(result) == True
+}
+
+pub fn api_stream_complete_without_message_stop_test() {
+  // Test api_stream_complete returns False without MessageStopEvent
+  let result = ApiStreamResultConstructor(events: [])
+  assert api_stream_complete(result) == False
+}
+
+pub fn api_stream_has_error_with_error_event_test() {
+  // Test api_stream_has_error returns True when ErrorEvent is present
+  let error_event =
+    ErrorEvent(error: StreamingErrorConstructor(
+      error_type: "overloaded_error",
+      message: "Server overloaded",
+    ))
+  let result = ApiStreamResultConstructor(events: [error_event])
+  assert api_stream_has_error(result) == True
+}
+
+pub fn api_stream_has_error_without_error_event_test() {
+  // Test api_stream_has_error returns False without ErrorEvent
+  let result = ApiStreamResultConstructor(events: [MessageStopEvent])
+  assert api_stream_has_error(result) == False
+}
+
+pub fn api_stream_message_id_test() {
+  // Test stream_message_id extracts ID from MessageStartEvent
+  let events = [
+    MessageStartEvent(message: StreamingMessageStart(
+      id: "msg_test123",
+      message_type: "message",
+      role: Assistant,
+      model: "claude-sonnet-4-20250514",
+      usage: Usage(input_tokens: 10, output_tokens: 0),
+    )),
+  ]
+  let result = ApiStreamResultConstructor(events: events)
+  assert stream_message_id(result) == Ok("msg_test123")
+}
+
+pub fn api_stream_message_id_not_found_test() {
+  // Test stream_message_id returns Error when no MessageStartEvent
+  let result = ApiStreamResultConstructor(events: [MessageStopEvent])
+  assert stream_message_id(result) == Error(Nil)
+}
+
+pub fn api_stream_model_test() {
+  // Test stream_model extracts model from MessageStartEvent
+  let events = [
+    MessageStartEvent(message: StreamingMessageStart(
+      id: "msg_test",
+      message_type: "message",
+      role: Assistant,
+      model: "claude-sonnet-4-20250514",
+      usage: Usage(input_tokens: 10, output_tokens: 0),
+    )),
+  ]
+  let result = ApiStreamResultConstructor(events: events)
+  assert stream_model(result) == Ok("claude-sonnet-4-20250514")
+}
+
+pub fn api_stream_error_type_test() {
+  // Test StreamError type variants
+  let http_err =
+    StreamHttpError(error: NetworkError(reason: "Connection failed"))
+  let sse_err = SseParseError(message: "Invalid SSE format")
+  let decode_err = EventDecodeError(message: "Invalid JSON")
+  let api_err = StreamApiError(status: 500, body: "Internal error")
+
+  // Verify each error type can be constructed and matched
+  let _ = case http_err {
+    StreamHttpError(_) -> Nil
+    _ -> Nil
+  }
+
+  let _ = case sse_err {
+    SseParseError(msg) -> {
+      assert msg == "Invalid SSE format"
+    }
+    _ -> Nil
+  }
+
+  let _ = case decode_err {
+    EventDecodeError(msg) -> {
+      assert msg == "Invalid JSON"
+    }
+    _ -> Nil
+  }
+
+  case api_err {
+    StreamApiError(status: s, body: b) -> {
+      assert s == 500
+      assert b == "Internal error"
+    }
+    _ -> Nil
+  }
+}
+
+pub fn api_chat_alias_test() {
+  // Test that chat function exists and properly wraps create_message
+  // We can't make real API calls, but we can verify the function signature
+  // by testing that validation works the same way
+  set_env("ANTHROPIC_API_KEY", "test-api-key")
+  let assert Ok(client) = init()
+
+  // Create a request with empty messages (should fail validation)
+  let request = create_request("claude-sonnet-4-20250514", [], 1024)
+
+  // Both chat and create_message should fail validation the same way
+  let chat_result = chat(client, request)
+  let create_result = create_message(client, request)
+
+  // Both should return the same validation error
+  assert chat_result == create_result
 }
