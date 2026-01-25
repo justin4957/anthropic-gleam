@@ -202,6 +202,21 @@
 //// - `anthropic/hooks` - Logging and telemetry hooks
 //// - `anthropic/testing` - Mock responses for testing
 
-// This module intentionally has no exports.
-// Import from the specific modules you need.
-// This follows idiomatic Gleam design: small, focused modules with clear APIs.
+// =============================================================================
+// Package Metadata
+// =============================================================================
+
+/// The current version of the anthropic_gleam library.
+///
+/// This follows semantic versioning (https://semver.org/).
+pub const version = "0.1.1"
+// Import from the specific modules you need:
+// - anthropic/api - High-level API functions
+// - anthropic/client - HTTP client wrapper
+// - anthropic/config - Configuration management
+// - anthropic/request - Request/response types
+// - anthropic/message - Message types
+// - anthropic/error - Error types and helpers
+// - anthropic/tool - Tool definition types
+// - anthropic/tools - Tool use utilities
+// - anthropic/streaming/handler - Streaming support
