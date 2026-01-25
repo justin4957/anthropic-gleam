@@ -9,9 +9,9 @@
 //// import anthropic/api
 //// import anthropic/client
 //// import anthropic/config
-//// import anthropic/types/error
-//// import anthropic/types/message
-//// import anthropic/types/request
+//// import anthropic/error
+//// import anthropic/message
+//// import anthropic/request
 //// import gleam/io
 ////
 //// pub fn main() {
@@ -22,14 +22,14 @@
 ////   let api_client = client.new(cfg)
 ////
 ////   // Create a request
-////   let req = request.create_request(
+////   let req = request.new(
 ////     "claude-sonnet-4-20250514",
 ////     [message.user_message("Hello, Claude!")],
 ////     1024,
 ////   )
 ////
 ////   // Send the request
-////   case api.create_message(api_client, req) {
+////   case api.chat(api_client, req) {
 ////     Ok(response) -> io.println(request.response_text(response))
 ////     Error(err) -> io.println("Error: " <> error.error_to_string(err))
 ////   }
@@ -42,12 +42,13 @@
 //// HTTP client. Build requests and parse responses without HTTP dependencies:
 ////
 //// ```gleam
+//// import anthropic/error
 //// import anthropic/http
-//// import anthropic/types/message
-//// import anthropic/types/request
+//// import anthropic/message
+//// import anthropic/request
 ////
 //// // Build the request
-//// let req = request.create_request(
+//// let req = request.new(
 ////   "claude-sonnet-4-20250514",
 ////   [message.user_message("Hello!")],
 ////   1024,
@@ -70,14 +71,14 @@
 ////
 //// ```gleam
 //// import anthropic/http
+//// import anthropic/message
+//// import anthropic/request
 //// import anthropic/streaming/handler.{
-////   new_streaming_state, process_chunk, finalize_stream, get_event_text
+////   finalize_stream, get_event_text, new_streaming_state, process_chunk,
 //// }
-//// import anthropic/types/message
-//// import anthropic/types/request
 ////
 //// // Build streaming request
-//// let req = request.create_request(
+//// let req = request.new(
 ////   "claude-sonnet-4-20250514",
 ////   [message.user_message("Write a poem")],
 ////   1024,
@@ -107,14 +108,12 @@
 //// Define tools and handle tool calls:
 ////
 //// ```gleam
+//// import anthropic/request.{with_tool_choice, with_tools}
+//// import anthropic/tool.{Auto}
+//// import anthropic/tools.{dispatch_tool_calls, extract_tool_calls, needs_tool_execution}
 //// import anthropic/tools/builder.{
-////   tool_builder, with_description, add_string_param, build
+////   add_string_param, build, tool_builder, with_description,
 //// }
-//// import anthropic/tools.{
-////   needs_tool_execution, extract_tool_calls, dispatch_tool_calls
-//// }
-//// import anthropic/types/tool.{Auto, ToolSuccess}
-//// import anthropic/types/request.{with_tools, with_tool_choice}
 ////
 //// // Define a tool
 //// let weather_tool = tool_builder("get_weather")
@@ -123,19 +122,19 @@
 ////   |> build()
 ////
 //// // Add to request
-//// let req = request.create_request(model, messages, max_tokens)
+//// let req = request.new(model, messages, max_tokens)
 ////   |> with_tools([weather_tool])
 ////   |> with_tool_choice(Auto)
 ////
 //// // Handle tool calls
-//// case api.create_message(api_client, req) {
+//// case api.chat(api_client, req) {
 ////   Ok(response) -> {
 ////     case needs_tool_execution(response) {
 ////       True -> {
 ////         let calls = extract_tool_calls(response)
 ////         let handlers = [
-////           #("get_weather", fn(tool_use_id, _input) {
-////             ToolSuccess(tool_use_id: tool_use_id, content: "{\"temp\": 72}")
+////           #("get_weather", fn(_input) {
+////             Ok("{\"temp\": 72}")
 ////           }),
 ////         ]
 ////         let results = dispatch_tool_calls(calls, handlers)
@@ -151,11 +150,11 @@
 //// ## Error Handling
 ////
 //// ```gleam
-//// import anthropic/types/error.{
-////   is_retryable, is_rate_limit_error, is_authentication_error, error_to_string
+//// import anthropic/error.{
+////   error_to_string, is_authentication_error, is_rate_limit_error, is_retryable,
 //// }
 ////
-//// case api.create_message(api_client, request) {
+//// case api.chat(api_client, request) {
 ////   Ok(response) -> handle_success(response)
 ////   Error(err) -> {
 ////     io.println("Error: " <> error_to_string(err))
@@ -176,21 +175,20 @@
 //// ## Module Structure
 ////
 //// **Core Modules:**
-//// - `anthropic/api` - High-level API functions (create_message)
+//// - `anthropic/api` - High-level API functions (`chat`, `chat_stream`)
 //// - `anthropic/client` - HTTP client wrapper
 //// - `anthropic/config` - Configuration management
 //// - `anthropic/http` - Sans-IO HTTP types and builders
 ////
 //// **Type Modules:**
-//// - `anthropic/types/message` - Message and content block types
-//// - `anthropic/types/request` - Request/response types
-//// - `anthropic/types/error` - Error types
-//// - `anthropic/types/tool` - Tool definition types
-//// - `anthropic/types/streaming` - Streaming event types
+//// - `anthropic/message` - Message and content block types
+//// - `anthropic/request` - Request/response types
+//// - `anthropic/error` - Error types and helpers
+//// - `anthropic/tool` - Tool definition types
+//// - `anthropic/streaming` - Streaming event types
 ////
 //// **Streaming Modules:**
 //// - `anthropic/streaming/handler` - Stream handling (batch and real-time)
-//// - `anthropic/streaming/sse` - SSE parser (low-level)
 //// - `anthropic/streaming/decoder` - Event decoder (low-level)
 //// - `anthropic/streaming/accumulator` - Stream accumulator
 ////
@@ -200,7 +198,7 @@
 ////
 //// **Utility Modules:**
 //// - `anthropic/retry` - Retry logic with exponential backoff
-//// - `anthropic/validation` - Request validation
+//// - `anthropic/internal/validation` - Request validation (internal)
 //// - `anthropic/hooks` - Logging and telemetry hooks
 //// - `anthropic/testing` - Mock responses for testing
 
