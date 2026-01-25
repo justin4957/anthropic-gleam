@@ -1671,6 +1671,28 @@ pub fn mock_text_response_body_test() {
   assert string.contains(body, "msg_123")
   assert string.contains(body, "Hello!")
   assert string.contains(body, "end_turn")
+  // Verify stop_sequence field is present (as null)
+  assert string.contains(body, "stop_sequence")
+}
+
+pub fn mock_text_response_body_parseable_test() {
+  // Verify that mock_text_response_body produces valid JSON that can be parsed
+  let body = mock_text_response_body("msg_test_parse", "Test message")
+  let http_response = HttpResponse(status: 200, headers: [], body: body)
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert response.id == "msg_test_parse"
+      assert response_text(response) == "Test message"
+      assert response.stop_reason == Some(EndTurn)
+      assert response.stop_sequence == option.None
+    }
+    Error(err) ->
+      panic as {
+        "mock_text_response_body should produce parseable JSON: "
+        <> error_to_string(err)
+      }
+  }
 }
 
 pub fn mock_tool_use_response_body_test() {
@@ -1679,6 +1701,34 @@ pub fn mock_tool_use_response_body_test() {
   assert string.contains(body, "tool_1")
   assert string.contains(body, "search")
   assert string.contains(body, "tool_use")
+  // Verify stop_sequence field is present (as null)
+  assert string.contains(body, "stop_sequence")
+}
+
+pub fn mock_tool_use_response_body_parseable_test() {
+  // Verify that mock_tool_use_response_body produces valid JSON that can be parsed
+  let body =
+    mock_tool_use_response_body(
+      "msg_tool_parse",
+      "toolu_123",
+      "get_weather",
+      "{}",
+    )
+  let http_response = HttpResponse(status: 200, headers: [], body: body)
+
+  case parse_messages_response(http_response) {
+    Ok(response) -> {
+      assert response.id == "msg_tool_parse"
+      assert response.stop_reason == Some(ToolUse)
+      assert response.stop_sequence == option.None
+      assert response_has_tool_use(response) == True
+    }
+    Error(err) ->
+      panic as {
+        "mock_tool_use_response_body should produce parseable JSON: "
+        <> error_to_string(err)
+      }
+  }
 }
 
 pub fn mock_error_body_test() {
