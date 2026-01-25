@@ -1,5 +1,5 @@
 name = "anthropic_gleam"
-version = "0.1.0"
+version = "0.1.1"
 description = "A well-typed, idiomatic Gleam client for Anthropic's Claude API with streaming support and tool use"
 licences = ["MIT"]
 repository = { type = "github", user = "justin4957", repo = "anthropic-gleam" }
