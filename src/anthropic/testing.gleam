@@ -263,6 +263,9 @@ pub fn mock_invalid_request_error(error_message: String) -> Response(String) {
 // =============================================================================
 
 /// Build a mock text response body JSON
+///
+/// The generated JSON includes all fields that the Anthropic API returns,
+/// including `stop_sequence` (set to null for text responses).
 pub fn mock_text_response_body(id: String, text: String) -> String {
   json.to_string(
     json.object([
@@ -283,6 +286,7 @@ pub fn mock_text_response_body(id: String, text: String) -> String {
       ),
       #("model", json.string("claude-sonnet-4-20250514")),
       #("stop_reason", json.string("end_turn")),
+      #("stop_sequence", json.null()),
       #(
         "usage",
         json.object([
@@ -295,6 +299,9 @@ pub fn mock_text_response_body(id: String, text: String) -> String {
 }
 
 /// Build a mock tool use response body JSON
+///
+/// The generated JSON includes all fields that the Anthropic API returns,
+/// including `stop_sequence` (set to null for tool use responses).
 pub fn mock_tool_use_response_body(
   id: String,
   tool_id: String,
@@ -324,6 +331,7 @@ pub fn mock_tool_use_response_body(
       ),
       #("model", json.string("claude-sonnet-4-20250514")),
       #("stop_reason", json.string("tool_use")),
+      #("stop_sequence", json.null()),
       #(
         "usage",
         json.object([
