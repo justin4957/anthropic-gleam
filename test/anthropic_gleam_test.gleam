@@ -4557,6 +4557,40 @@ pub fn http_parse_response_body_missing_fields_test() {
   }
 }
 
+pub fn http_parse_response_body_missing_optional_fields_test() {
+  // Test that optional fields (stop_reason, stop_sequence) can be missing entirely
+  // This is important for compatibility with API responses that may omit these fields
+  let body =
+    "{\"id\":\"msg_test\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Hi\"}],\"model\":\"claude-sonnet-4-20250514\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}"
+
+  case parse_response_body(body) {
+    Ok(response) -> {
+      assert response.id == "msg_test"
+      assert response_text(response) == "Hi"
+      assert response.stop_reason == option.None
+      assert response.stop_sequence == option.None
+    }
+    Error(err) ->
+      panic as { "Expected successful parse, got: " <> error_to_string(err) }
+  }
+}
+
+pub fn http_parse_response_body_with_stop_sequence_test() {
+  // Test that stop_sequence is correctly parsed when present
+  let body =
+    "{\"id\":\"msg_test\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Hi\"}],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":\"stop_sequence\",\"stop_sequence\":\"END\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}"
+
+  case parse_response_body(body) {
+    Ok(response) -> {
+      assert response.id == "msg_test"
+      assert response.stop_reason == option.Some(request.StopSequence)
+      assert response.stop_sequence == option.Some("END")
+    }
+    Error(err) ->
+      panic as { "Expected successful parse, got: " <> error_to_string(err) }
+  }
+}
+
 // -----------------------------------------------------------------------------
 // HTTP Request Validation Tests
 // -----------------------------------------------------------------------------

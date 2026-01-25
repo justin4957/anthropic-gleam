@@ -67,18 +67,22 @@ pub fn response_decoder() -> decode.Decoder(CreateMessageResponse) {
   use content <- decode.field("content", decode.list(content_block_decoder()))
   use model <- decode.field("model", decode.string)
   use usage <- decode.field("usage", usage_decoder())
-  use stop_reason <- decode.field(
+  // Handle stop_reason - can be missing, null, or a string
+  // Use optional_field with optional(string) to handle all cases
+  use stop_reason_opt <- decode.optional_field(
     "stop_reason",
-    decode.optional(decode.string)
-      |> decode.map(fn(opt) {
-        case opt {
-          Some(s) -> parse_stop_reason(s)
-          None -> None
-        }
-      }),
+    None,
+    decode.optional(decode.string),
   )
-  use stop_sequence <- decode.field(
+  let stop_reason = case stop_reason_opt {
+    Some(s) -> parse_stop_reason(s)
+    None -> None
+  }
+
+  // Handle stop_sequence - can be missing, null, or a string
+  use stop_sequence <- decode.optional_field(
     "stop_sequence",
+    None,
     decode.optional(decode.string),
   )
 

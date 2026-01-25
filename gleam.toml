@@ -1,16 +1,11 @@
 name = "anthropic_gleam"
 version = "0.1.0"
-
-description = "A well-typed, idiomatic Gleam client for Anthropic's Claude API with streaming support, tool use, and sans-io architecture"
+description = "A well-typed, idiomatic Gleam client for Anthropic's Claude API with streaming support and tool use"
 licences = ["MIT"]
 repository = { type = "github", user = "justin4957", repo = "anthropic-gleam" }
-links = [
-  { title = "Documentation", href = "https://hexdocs.pm/anthropic_gleam" },
-  { title = "Sponsor", href = "https://github.com/sponsors/justin4957" }
-]
 
 [dependencies]
-gleam_stdlib = ">= 0.67.0 and < 2.0.0"
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
 gleam_json = ">= 3.0.0 and < 4.0.0"
 gleam_http = ">= 4.0.0 and < 5.0.0"
 gleam_httpc = ">= 5.0.0 and < 6.0.0"
