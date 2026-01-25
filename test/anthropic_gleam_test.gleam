@@ -1572,9 +1572,55 @@ import anthropic/testing.{
   fixture_simple_response, fixture_stop_sequence_response,
   fixture_tool_use_response, has_api_key, mock_auth_error, mock_error_body,
   mock_error_response, mock_invalid_request_error, mock_overloaded_error,
-  mock_rate_limit_error, mock_text_response, mock_text_response_body,
-  mock_tool_use_response, mock_tool_use_response_body,
+  mock_rate_limit_error, mock_response, mock_response_with, mock_text_response,
+  mock_text_response_body, mock_tool_use_response, mock_tool_use_response_body,
 }
+
+// =============================================================================
+// Convenience Response Builder Tests
+// =============================================================================
+
+pub fn mock_response_test() {
+  // mock_response returns a CreateMessageResponse directly
+  let resp = mock_response("Hello from Claude!")
+  assert string.contains(resp.id, "msg_mock_")
+  assert resp.response_type == "message"
+  assert resp.role == Assistant
+  assert resp.stop_reason == Some(EndTurn)
+
+  // Can use with response_text directly
+  let text = response_text(resp)
+  assert text == "Hello from Claude!"
+}
+
+pub fn mock_response_generates_unique_ids_test() {
+  // Each call should generate a different ID
+  let resp1 = mock_response("First")
+  let resp2 = mock_response("Second")
+  assert resp1.id != resp2.id
+}
+
+pub fn mock_response_with_test() {
+  // mock_response_with allows customization
+  let resp =
+    mock_response_with(
+      "Custom response",
+      model: "claude-opus-4-20250514",
+      stop_reason: Some(MaxTokens),
+      input_tokens: 100,
+      output_tokens: 500,
+    )
+
+  assert resp.model == "claude-opus-4-20250514"
+  assert resp.stop_reason == Some(MaxTokens)
+  assert resp.usage.input_tokens == 100
+  assert resp.usage.output_tokens == 500
+  assert response_text(resp) == "Custom response"
+}
+
+// =============================================================================
+// HTTP Response Mock Tests
+// =============================================================================
 
 pub fn mock_text_response_test() {
   let resp = mock_text_response("Hello, world!")
